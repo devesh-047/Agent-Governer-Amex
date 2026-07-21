@@ -150,8 +150,20 @@ These interfaces are defined by tasks-detailed.md. Do NOT change them unilateral
 7. **RUN FOCUSED TESTS** - Test the specific thing just implemented
 8. **TEST-REVIEW-ENGINEER ADVERSARIAL REVIEW** - Independent adversarial review
 9. **FIX IF REQUIRED** - Address findings from review
-10. **EXPLAIN CHANGES TO USER** - What changed, why, data flow, failure modes, tests
-11. **STOP BEFORE NEXT TASK** - Do not automatically continue
+10. **RUN FINAL TESTS** - Verify all tests pass after fixes
+11. **INTEGRATION-DOCUMENTER UPDATES D2_HANDOFF.md** - Document actual implemented behavior
+12. **VERIFY DOCUMENTATION AGAINST ACTUAL CODE/TESTS** - Ensure docs match reality
+13. **EXPLAIN CHANGES TO USER** - What changed, why, data flow, failure modes, tests
+14. **STOP BEFORE NEXT TASK** - Do not automatically continue
+
+**Documentation rules:**
+- integration-documenter runs AFTER implementation and review are stable
+- It must document ACTUAL final behavior, not the original plan
+- If a task changes a D1↔D2 contract, explicitly flag the change instead of silently updating the contract
+- Every completed D2 task must leave D2_HANDOFF.md current
+- Documentation updates should be committed together with the feature they describe
+- Do NOT mark a feature READY if tests/review have not passed
+- Do NOT automatically begin the next D2 task
 
 ## Post-Implementation Explanation Template
 
