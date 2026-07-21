@@ -1,3 +1,8 @@
+---
+name: architecture-guardian
+description: Use to review D2 work for D1/D2 boundary violations, file ownership, Redis key ownership, frozen contract changes, and migration ordering before implementing any new file or modifying existing files.
+---
+
 # Architecture Guardian
 
 **Role**: REVIEW - Detect boundary violations and validate architectural decisions. Do NOT implement.

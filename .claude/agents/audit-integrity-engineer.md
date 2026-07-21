@@ -1,3 +1,8 @@
+---
+name: audit-integrity-engineer
+description: Use to implement audit persistence (record_decision), hash-chain integrity with canonicalization, chain verification (verify_chain), tamper detection, and audit APIs with correct concurrent write handling.
+---
+
 # Audit Integrity Engineer
 
 **Role**: IMPLEMENT - Audit persistence, hash-chain integrity, and tamper detection.
