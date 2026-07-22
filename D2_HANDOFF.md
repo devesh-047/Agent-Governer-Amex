@@ -10,7 +10,7 @@
 | Feature | Status | D1 Action Needed |
 |---------|--------|------------------|
 | Identity verification | IMPLEMENTED / NOT INTEGRATED | Provide Agent model + AgentLookup implementation |
-| Runtime status (check_runtime_status) | NOT STARTED | - |
+| Runtime status (check_runtime_status) | IMPLEMENTED / NOT INTEGRATED | Provide Redis client implementation |
 | Agent revoke/restore | NOT STARTED | - |
 | Fleet halt/resume | NOT STARTED | - |
 | Audit persistence | NOT STARTED | D1.2 (agents migration) must land first |
@@ -45,7 +45,7 @@
 │          [IMPLEMENTED]                                               │
 │                                                                       │
 │  Step 2: Runtime Safety → D2.check_runtime_status()                   │
-│          [PLANNED]                                                    │
+│          [IMPLEMENTED / NOT INTEGRATED]                               │
 │                                                                       │
 │  Step 3: Policy Evaluation → D1.evaluate_policy()                     │
 │          [D1-OWNED]                                                   │
@@ -60,7 +60,7 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Current state:** Identity verification is implemented and tested. Runtime safety and audit write are planned.
+**Current state:** Identity verification and runtime status are implemented and tested. Agent revoke/restore, fleet halt/resume, and audit write are planned.
 
 ---
 
@@ -144,13 +144,119 @@ set_agent_lookup(your_agent_lookup_implementation)
 
 ---
 
+### 3.2 Runtime Status (IMPLEMENTED / NOT INTEGRATED)
+
+**What it does:** Validates runtime safety state using Redis-backed fleet and agent status tracking. Returns whether the fleet is halted, the agent is revoked, and the runtime state is available.
+
+**D1 calls:**
+```python
+from services.runtime_state import check_runtime_status, set_redis_client
+
+# During app startup - ONCE
+set_redis_client(your_redis_client_implementation)
+
+# In request pipeline
+status = check_runtime_status(agent_id)
+if not status.available:
+    return HTTP 503 Service Unavailable  # RUNTIME_STATE_UNAVAILABLE
+if status.fleet_halted or status.agent_revoked:
+    return HTTP 403 Forbidden  # RUNTIME_STATE_DENY
+```
+
+**Input:**
+| Field | Type | Description |
+|-------|------|-------------|
+| agent_id | str | Agent identifier from identity check |
+
+**Output (RuntimeStatus):**
+| Field | Type | Description |
+|-------|------|-------------|
+| fleet_halted | bool | True if fleet-wide kill switch is active |
+| agent_revoked | bool | True if this specific agent is revoked |
+| available | bool | False if Redis unreachable or state is malformed |
+
+**Redis Keys (D2-owned, NO TTL):**
+| Key | Canonical Values | Meaning |
+|-----|-----------------|---------|
+| `fleet:halted` | "true", "false" | Fleet-wide kill switch state |
+| `agent:{id}:status` | "active", "revoked" | Per-agent revocation state |
+
+**Canonical value contract (strict):**
+- NO support for 1/0, yes/no, or other boolean representations
+- Case-sensitive matching only (no "True", "FALSE", etc.)
+- Both bytes and str types are accepted
+- Invalid UTF-8 bytes trigger fail-closed
+
+**Overlay model (missing keys):**
+- Missing `fleet:halted` → fleet_halted=False (fleet operational)
+- Missing `agent:{id}:status` → agent_revoked=False (agent active)
+- Both keys missing → fully operational (available=True)
+
+**Example flow:**
+```
+Agent Request → check_runtime_status(agent_id)
+    → Read fleet:halted and agent:{id}:status from Redis
+    → Parse values against canonical forms
+    → RuntimeStatus(fleet_halted, agent_revoked, available)
+    → If available=False: Return 503
+    → If fleet_halted=True or agent_revoked=True: Return 403
+    → Otherwise: Continue to policy evaluation
+```
+
+**Failure behavior:**
+- Redis not configured: Returns `RuntimeStatus(available=False)`
+- Redis connection error: Returns `RuntimeStatus(available=False)`
+- Malformed/unrecognized value: Returns `RuntimeStatus(available=False)`
+- Decode failure (invalid UTF-8): Returns `RuntimeStatus(available=False)`
+- Empty/None agent_id: Returns `RuntimeStatus(available=False)`
+- Unexpected data type: Returns `RuntimeStatus(available=False)`
+
+**Safety properties:**
+- Fail-closed: Any error or malformed state → available=False
+- Strict parsing: Only canonical values accepted
+- Overlay model: Missing keys → operational defaults
+- No silent failures: All errors surface as unavailable state
+- Fail-closed handling for Redis errors and malformed runtime state
+- Thread-safe: Concurrent reads are safe
+
+**What D1 must provide:**
+1. A concrete implementation of the `RedisClient` protocol
+2. Call `set_redis_client()` once during application startup
+3. Ensure Redis is accessible before accepting requests
+
+**RedisClient protocol (D2 defines, D1 implements):**
+```python
+from services.runtime_state import set_redis_client, RedisClient
+
+class D1RedisClient:
+    def __init__(self, redis_url: str):
+        import redis
+        self.client = redis.from_url(redis_url)
+
+    def get(self, key: str) -> Optional[Union[str, bytes]]:
+        # Return the raw Redis response (str, bytes, or None)
+        # Redis errors MUST propagate to _redis_get() for fail-closed handling
+        return self.client.get(key)
+
+# During app initialization
+set_redis_client(D1RedisClient(redis_url))
+```
+
+**Integration status:** IMPLEMENTED / NOT INTEGRATED
+- D2 code is complete and tested (46 passing tests)
+- Awaiting D1's Redis client implementation
+- D2.3 (revoke/restore) and D2.4 (halt/resume) are NOT implemented yet
+- State changes (write operations) must wait for D2.3/D2.4
+
+---
+
 ## 4. D2-Owned Runtime State
 
-*This section will be populated as Redis keys are implemented.*
+**Redis keys (D2-owned, NO TTL):**
+- `agent:{id}:status` - Runtime status: "active" or "revoked"
+- `fleet:halted` - Fleet-wide halt flag: "true" or "false"
 
-**Planned Redis keys (per tasks-detailed.md):**
-- `agent:{id}:status` - Runtime status: "active" or "revoked" (D2-owned, NO TTL)
-- `fleet:halted` - Fleet-wide halt flag (D2-owned, NO TTL)
+**State persistence:** Runtime safety keys have NO TTL. State changes occur ONLY through explicit revoke/restore/halt/resume operations (D2.3, D2.4 - NOT YET IMPLEMENTED).
 
 ---
 
@@ -172,6 +278,7 @@ Before D2 can implement certain features, D1 must provide:
 | Feature | D1 Prerequisite | Status |
 |---------|-----------------|--------|
 | Identity verification | `Agent` model with `shared_secret` column, `AgentLookup` implementation | IMPLEMENTED / NOT INTEGRATED |
+| Runtime status | Redis infrastructure, `RedisClient` implementation | IMPLEMENTED / NOT INTEGRATED |
 | Audit persistence | `agents` table with `id` primary key | NOT STARTED |
 
 ---
@@ -199,32 +306,44 @@ Before D2 can implement certain features, D1 must provide:
 
 ### Active Integration Requirements
 
-For Identity Verification (D2.1), D1 needs to provide:
+For Identity Verification (D2.1) and Runtime Status (D2.2), D1 needs to provide:
 
+**Identity Verification (D2.1):**
 1. **Agent database model** with `shared_secret` column
 2. **AgentLookup protocol implementation** that queries the database
 3. **One-time call to `set_agent_lookup()`** during application initialization
 
+**Runtime Status (D2.2):**
+1. **Redis client** (redis-py or equivalent) accessible from application
+2. **RedisClient protocol implementation** wrapping the Redis client
+3. **One-time call to `set_redis_client()`** during application initialization
+
 ### Why D2 Needs This
 
-D2's `verify_identity()` function doesn't directly access the database. Instead, it uses dependency injection:
+D2's runtime functions don't directly access external dependencies. Instead, they use dependency injection:
 
-- D2 defines the `AgentLookup` protocol (interface)
-- D2 provides `set_agent_lookup()` to inject a concrete implementation
-- D1 implements `AgentLookup` using their database model
-- D1 calls `set_agent_lookup()` once at startup
+- D2 defines the `AgentLookup` and `RedisClient` protocols (interfaces)
+- D2 provides `set_agent_lookup()` and `set_redis_client()` to inject concrete implementations
+- D1 implements these protocols using their infrastructure
+- D1 calls the setters once at startup
 
-This keeps D2's identity logic independent of D1's database schema while enabling clean integration.
+This keeps D2's logic independent of D1's infrastructure while enabling clean integration.
 
 ### Current D1 Dependencies
 
-D2.1 is implemented and tested. Integration requires D1 to provide:
+D2.1 and D2.2 are implemented and tested. Integration requires D1 to provide:
 
+**For D2.1 (Identity):**
 1. **Agent database model** with `shared_secret` column (D1.2)
 2. **AgentLookup protocol implementation** that queries the database
 3. **One-time call to `set_agent_lookup()`** during application initialization
 
-No code blockers exist, but integration is incomplete until D1 lands the Agent model.
+**For D2.2 (Runtime):**
+1. **Redis infrastructure** (D1's docker-compose provides this)
+2. **RedisClient protocol implementation** wrapping the Redis client
+3. **One-time call to `set_redis_client()`** during application initialization
+
+No code blockers exist for D2.1/D2.2, but integration is incomplete until D1 provides these implementations.
 
 ---
 
@@ -237,14 +356,18 @@ Use this checklist when integrating D2 work into D1's orchestration.
 - [ ] Read D2_HANDOFF.md "Quick Status" section
 - [ ] Identify which D2 features are READY FOR INTEGRATION
 - [ ] Review D2-owned Redis keys (ensure no conflicts)
-- [ ] Verify D1 prerequisites are met (agents table, migrations)
+- [ ] Verify D1 prerequisites are met (agents table, migrations, Redis)
 
 ### During Integration
 
 - [ ] Import D2 functions into D1's orchestration
 - [ ] Wire D2 calls in the correct order (Identity → Runtime → Policy → Spend → Decision → Audit)
-- [ ] Translate IdentityResult/ActionDecision responses appropriately
+- [ ] Call `set_agent_lookup()` once during app initialization
+- [ ] Call `set_redis_client()` once during app initialization
+- [ ] Translate IdentityResult/RuntimeStatus responses appropriately
 - [ ] Handle HTTP 401 for identity failures (not 200 with decision:deny)
+- [ ] Handle HTTP 503 for runtime unavailable (available=False)
+- [ ] Handle HTTP 403 for runtime deny (fleet_halted/agent_revoked)
 
 ### After Integration
 
@@ -256,6 +379,43 @@ Use this checklist when integrating D2 work into D1's orchestration.
 ---
 
 ## 9. Recent D2 Changes
+
+### 2026-07-22: D2.2 Runtime Status (IMPLEMENTED)
+
+**Files created/modified:**
+- `services/runtime_state.py` - Complete implementation with fail-closed behavior
+- `tests/test_runtime_safety.py` - 46 comprehensive tests, all passing
+
+**What was implemented:**
+- `check_runtime_status(agent_id) -> RuntimeStatus`
+- `set_redis_client(client)` - Module-level dependency injection
+- `reset_redis_client()` - Test cleanup utility
+- `RedisClient` protocol - D1's integration point
+- `RuntimeStatus` dataclass - Frozen schema
+- Overlay model (missing keys → operational defaults)
+- Strict canonical value parsing (no 1/0, case-sensitive)
+- Fail-closed behavior on Redis errors/malformed values
+- UTF-8 decode error handling
+- Thread-safe concurrent reads
+
+**Tests performed (46 passing):**
+- Valid operational states (all keys missing, fleet halted, agent revoked)
+- Redis unreachable/unconfigured scenarios
+- Parse failures (decode errors, unrecognized values, unexpected types)
+- Data type variations (bytes, str, None)
+- Canonical value strictness (rejects 1/0, case variations)
+- Multiple agents with independent status
+- Concurrent read safety
+- Module-level dependency injection verification
+- Frozen contract signature verification
+- RuntimeStatus immutability
+
+**Integration status:** IMPLEMENTED / NOT INTEGRATED
+- D2 code is complete and tested
+- Awaiting D1's Redis client implementation
+- D2.3 (revoke/restore) and D2.4 (halt/resume) are NOT implemented yet
+
+---
 
 ### 2026-07-21: D2.1 Identity Verification (IMPLEMENTED)
 
@@ -325,7 +485,13 @@ check_runtime_status(agent_id: str) -> RuntimeStatus
 }
 ```
 
-**D1 usage:** Call after identity check. If `available=False`, treat as `RUNTIME_STATE_UNAVAILABLE` deny. If `fleet_halted=True` or `agent_revoked=True`, deny with appropriate reason code.
+**D1 usage:** Call after identity check. If `available=False`, return HTTP 503 (RUNTIME_STATE_UNAVAILABLE). If `fleet_halted=True` or `agent_revoked=True`, return HTTP 403 (RUNTIME_STATE_DENY). Otherwise, continue to policy evaluation.
+
+**Redis keys (D2-owned):**
+- `fleet:halted` stores "true" (halted) or "false" (operational)
+- `agent:{id}:status` stores "active" (operational) or "revoked" (blocked)
+
+**Integration:** D1 must call `set_redis_client()` once during app initialization with a concrete `RedisClient` implementation.
 
 ---
 
@@ -376,7 +542,7 @@ D2 owns these files (per tasks-detailed.md):
 | `routers/runtime.py` | `/agents/{id}/revoke`, `/restore` |
 | `routers/fleet.py` | `/fleet/halt`, `/resume` |
 | `routers/audit.py` | `/audit/feed`, `/audit/log`, `/audit/verify-chain` |
-| `schemas/audit.py` | D2-owned schemas (RuntimeStatus, AuditLogEntry, FleetState) |
+| `schemas/audit.py` | D2-owned schemas (AuditLogEntry, FleetState) |
 | `demo/agents/*` | Three scripted demo agents + runner |
 | `frontend/**` | Entire React dashboard |
 
