@@ -8,5 +8,9 @@ class D1AgentLookup(AgentLookup):
         try:
             agent = db.query(Agent).filter_by(id=agent_id).first()
             return agent.shared_secret if agent else None
+        except Exception:
+            # Database failure: return None for fail-closed behavior
+            # D2's verify_identity() treats None as "agent not found" → valid=False
+            return None
         finally:
             db.close()

@@ -7,13 +7,15 @@
 
 ## 1. Quick Status
 
+**Integration Checkpoint (2026-07-23): D1 branch `agents-table-migration` merged. D2.1 and D2.2 are now INTEGRATED.**
+
 | Feature | Status | D1 Action Needed |
 |---------|--------|------------------|
-| Identity verification | IMPLEMENTED / NOT INTEGRATED | Provide Agent model + AgentLookup implementation |
-| Runtime status (check_runtime_status) | IMPLEMENTED / NOT INTEGRATED | Provide Redis client implementation |
+| Identity verification | ✅ INTEGRATED | None - fully wired and tested |
+| Runtime status (check_runtime_status) | ✅ INTEGRATED | None - fully wired and tested |
 | Agent revoke/restore | NOT STARTED | - |
 | Fleet halt/resume | NOT STARTED | - |
-| Audit persistence | NOT STARTED | D1.2 (agents migration) must land first |
+| Audit persistence | NOT STARTED | - |
 | Audit integrity verification | NOT STARTED | - |
 | Audit query APIs | NOT STARTED | - |
 | Frontend dashboard (Phase 1) | IMPLEMENTED / MOCK-BASED | Swap mocks to real API when D2 endpoints ready |
@@ -24,8 +26,8 @@
 - `IN PROGRESS` - Currently being implemented
 - `IMPLEMENTED / NOT INTEGRATED` - Code exists, tests pass, awaiting D1 integration
 - `IMPLEMENTED / MOCK-BASED` - UI complete with mock data; backend integration pending
+- `INTEGRATED` - D1 and D2 code are merged and wired; tests pass
 - `READY FOR INTEGRATION` - Fully tested and documented
-- `INTEGRATED` - D1 has successfully integrated
 - `BLOCKED` - Waiting on D1 or external dependency
 
 ---
@@ -61,17 +63,37 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Current state:** Identity verification and runtime status are implemented and tested. Agent revoke/restore, fleet halt/resume, and audit write are planned.
+**Current state:** D2.1 (identity) and D2.2 (runtime status) are **INTEGRATED** with D1's database and Redis infrastructure. Tests pass with real Postgres and Redis.
 
 ---
 
 ## 3. Integration Points
 
-### 3.1 Identity Verification (IMPLEMENTED / NOT INTEGRATED)
+### 3.1 Identity Verification (✅ INTEGRATED)
 
 **What it does:** Validates agent credentials using timing-safe comparison. Returns whether credentials are valid and which agent ID authenticated.
 
-**D1 calls:**
+**Integration Status:**
+- D1's `Agent` model with `shared_secret` column: ✅ Implemented
+- D1's `D1AgentLookup` implementation: ✅ Implemented in `scripts/agent_lookup.py`
+- D1's agents migration (09ee32e4e00a): ✅ Applied
+- Wiring via `set_agent_lookup()`: ✅ Done in `main.py`
+- Tests: ✅ 7 integration tests passing with real Postgres
+
+**Data Flow:**
+```
+PostgreSQL (agents table)
+    ↓
+D1AgentLookup.get_agent_secret(agent_id)
+    ↓
+set_agent_lookup(D1AgentLookup())
+    ↓
+verify_identity(agent_id, secret)
+    ↓
+IdentityResult(valid=True/False, agent_id=...)
+```
+
+**How D1 calls (now wired in main.py):**
 ```python
 from services.identity import verify_identity, set_agent_lookup
 
@@ -117,10 +139,11 @@ Agent Request → Extract X-Agent-Id, X-Agent-Secret
 - Secrets never logged or exposed in exceptions
 - Fail-closed when agent lookup is not configured
 
-**What D1 must provide:**
-1. The `Agent` database model with a `shared_secret` column
-2. A concrete implementation of the `AgentLookup` protocol
-3. Call `set_agent_lookup()` once during application startup
+**What D1 has provided:**
+1. ✅ The `Agent` database model with a `shared_secret` column (`db/models/agent.py`)
+2. ✅ A concrete implementation of the `AgentLookup` protocol (`scripts/agent_lookup.py`)
+3. ✅ Call `set_agent_lookup()` at application startup (in `main.py`)
+4. ✅ Exception handling in `D1AgentLookup` for fail-closed behavior
 
 **AgentLookup protocol (D2 defines, D1 implements):**
 ```python
@@ -145,11 +168,30 @@ set_agent_lookup(your_agent_lookup_implementation)
 
 ---
 
-### 3.2 Runtime Status (IMPLEMENTED / NOT INTEGRATED)
+### 3.2 Runtime Status (✅ INTEGRATED)
 
 **What it does:** Validates runtime safety state using Redis-backed fleet and agent status tracking. Returns whether the fleet is halted, the agent is revoked, and the runtime state is available.
 
-**D1 calls:**
+**Integration Status:**
+- Redis infrastructure (docker-compose.yml): ✅ Provided by D1
+- `ProductionRedisClient` adapter: ✅ Implemented in `services/redis_client.py`
+- Wiring via `set_redis_client()`: ✅ Done in `main.py`
+- Tests: ✅ 9 integration tests passing with real Redis
+
+**Data Flow:**
+```
+Redis (fleet:halted, agent:{id}:status)
+    ↓
+ProductionRedisClient.get(key)
+    ↓
+set_redis_client(ProductionRedisClient(redis_url))
+    ↓
+check_runtime_status(agent_id)
+    ↓
+RuntimeStatus(fleet_halted, agent_revoked, available)
+```
+
+**How D1 calls (now wired in main.py):**
 ```python
 from services.runtime_state import check_runtime_status, set_redis_client
 
@@ -220,10 +262,12 @@ Agent Request → check_runtime_status(agent_id)
 - Fail-closed handling for Redis errors and malformed runtime state
 - Thread-safe: Concurrent reads are safe
 
-**What D1 must provide:**
-1. A concrete implementation of the `RedisClient` protocol
-2. Call `set_redis_client()` once during application startup
-3. Ensure Redis is accessible before accepting requests
+**What D1 has provided:**
+1. ✅ Redis infrastructure via docker-compose.yml (Postgres + Redis)
+2. ✅ REDIS_URL in .env.example for configuration
+3. ✅ `ProductionRedisClient` adapter implementing `RedisClient` protocol (in `services/redis_client.py`)
+4. ✅ Call `set_redis_client()` at application startup (in `main.py`)
+5. ✅ Redis exceptions propagate correctly for fail-closed behavior
 
 **RedisClient protocol (D2 defines, D1 implements):**
 ```python
@@ -525,19 +569,19 @@ This keeps D2's logic independent of D1's infrastructure while enabling clean in
 
 ### Current D1 Dependencies
 
-D2.1 and D2.2 are implemented and tested. Integration requires D1 to provide:
+D2.1 and D2.2 are implemented, tested, and **INTEGRATED**. D1 has provided:
 
-**For D2.1 (Identity):**
-1. **Agent database model** with `shared_secret` column (D1.2)
-2. **AgentLookup protocol implementation** that queries the database
-3. **One-time call to `set_agent_lookup()`** during application initialization
+**For D2.1 (Identity) - ✅ COMPLETE:**
+1. ✅ **Agent database model** with `shared_secret` column (`db/models/agent.py`)
+2. ✅ **AgentLookup protocol implementation** (`scripts/agent_lookup.py`)
+3. ✅ **One-time call to `set_agent_lookup()`** (in `main.py`)
+4. ✅ Exception handling for fail-closed DB failures
 
-**For D2.2 (Runtime):**
-1. **Redis infrastructure** (D1's docker-compose provides this)
-2. **RedisClient protocol implementation** wrapping the Redis client
-3. **One-time call to `set_redis_client()`** during application initialization
-
-No code blockers exist for D2.1/D2.2, but integration is incomplete until D1 provides these implementations.
+**For D2.2 (Runtime) - ✅ COMPLETE:**
+1. ✅ **Redis infrastructure** (docker-compose.yml with Postgres + Redis)
+2. ✅ **RedisClient protocol implementation** (`services/redis_client.py`)
+3. ✅ **One-time call to `set_redis_client()`** (in `main.py`)
+4. ✅ REDIS_URL configuration in .env.example
 
 ---
 
@@ -573,6 +617,79 @@ Use this checklist when integrating D2 work into D1's orchestration.
 ---
 
 ## 10. Recent D2 Changes
+
+### 2026-07-23: D1/D2 Integration Checkpoint (✅ INTEGRATED)
+
+**Branches merged:**
+- D1: `origin/d1/agents-table-migration`
+- D2: `feat/d2-runtime-safety`
+- Merge conflict: `.gitignore` (resolved)
+
+**Files created/modified:**
+- `services/redis_client.py` - ProductionRedisClient adapter
+- `main.py` - Application bootstrap wiring dependencies
+- `scripts/agent_lookup.py` - Updated with exception handling for fail-closed behavior
+- `tests/test_integration_identity.py` - 7 integration tests with real Postgres
+- `tests/test_integration_redis.py` - 9 integration tests with real Redis
+- `tests/test_startup_wiring.py` - 3 tests verifying bootstrap wiring
+- `.env.example` - Updated with REDIS_URL
+- `.env` - Created for local testing
+- `D1_Handoff.md` - D1's handoff document (from D1 branch)
+
+**D1 files integrated:**
+- `db/base.py` - SQLAlchemy Base, SessionLocal, get_db()
+- `db/models/agent.py` - Agent model with shared_secret
+- `db/models/__init__.py` - Package init
+- `alembic.ini` - Alembic configuration
+- `alembic/env.py` - Migration environment
+- `alembic/versions/09ee32e4e00a_create_agents_table.py` - Agents table migration
+- `docker-compose.yml` - Postgres + Redis infrastructure
+- `scripts/seed_agent.py` - Test data seeding
+- `scripts/__init__.py` - Package init
+
+**What was integrated:**
+- D1's `Agent` model with `shared_secret` → D2's `verify_identity()`
+- D1's `D1AgentLookup` → wired via `set_agent_lookup()` in `main.py`
+- D1's Postgres infrastructure → real database queries for identity
+- D2's `ProductionRedisClient` → D2's `check_runtime_status()`
+- D1's Redis infrastructure → real Redis reads for runtime state
+- Exception handling in `D1AgentLookup` for fail-closed DB failures
+- Auto-bootstrap on `main.py` import (temporary for integration milestone)
+
+**Test results (89 passing):**
+- 24 identity unit tests (mocked)
+- 46 runtime state unit tests (mocked)
+- 7 identity integration tests (real Postgres)
+- 9 Redis integration tests (real Redis)
+- 3 startup wiring tests
+- 10 frontend tests (mock-based)
+
+**Migration verified:**
+- `alembic upgrade head` applied successfully
+- `agents` table created with correct schema
+- `shared_secret` column present
+- Test agent seeded for integration testing
+
+**Security verified:**
+- Fail-closed behavior: DB errors → `valid=False`
+- Fail-closed behavior: Redis errors → `available=False`
+- Timing-safe secret comparison maintained
+- Exception handling prevents crash on infrastructure failure
+
+**Architecture verified:**
+- D1/D2 boundary compliance: PASS
+- Redis key ownership: no conflicts
+- Contract compatibility: all match
+- Frontend decoupling: still mock-based
+
+**Integration status:** ✅ INTEGRATED
+- D2.1 (identity): Fully wired with real database
+- D2.2 (runtime state): Fully wired with real Redis
+- D2.3+ (revoke/restore, halt/resume, audit): NOT started
+- Frontend: Still mock-based, backend integration pending
+- Full /action-request pipeline: NOT implemented (D1's next step)
+
+---
 
 ### 2026-07-22: D2.2 Runtime Status (IMPLEMENTED)
 

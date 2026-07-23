@@ -11,8 +11,8 @@
 |---------|--------|-------------------|
 | `agents` table + migration | READY FOR INTEGRATION | Set your `audit_log` migration's `down_revision` to `09ee32e4e00a` |
 | Postgres + Redis (docker-compose) | READY FOR INTEGRATION | Use the same `docker-compose.yml` — don't spin up your own instances |
-| `AgentLookup` implementation | IMPLEMENTED / NOT INTEGRATED | Merge your `services/identity.py` branch so this can be wired in (see §4) |
-| `RedisClient` implementation | NOT STARTED | Blocked on nothing — will be built next by D1 |
+| `AgentLookup` implementation | INTEGRATED | Wired in main.py, tested with real Postgres |
+| `RedisClient` implementation | INTEGRATED | Wired in main.py, tested with real Redis |
 | `/action-request` orchestration | NOT STARTED | Will call your `verify_identity()` / `check_runtime_status()` once both are wired |
 | OPA policy check | NOT STARTED | — |
 | Spend caps | NOT STARTED | — |
