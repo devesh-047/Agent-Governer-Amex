@@ -1,0 +1,27 @@
+# Environment / secrets
+.env
+.claude
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+.pytest_cache/
+
+# Alembic — keep versions/, ignore nothing here actually (see note below)
+
+# Docker
+# (nothing to ignore by default — docker-compose.yml itself should be committed)
+
+# OS/editor cruft
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
