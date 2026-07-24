@@ -38,6 +38,42 @@ def setup_integration():
     reset_agent_lookup()
 
 
+@pytest.fixture(scope="module", autouse=True)
+def seed_test_agent():
+    """Seed the test agent required for integration tests."""
+    import json
+    db = SessionLocal()
+    try:
+        # Check if agent already exists
+        existing = db.query(Agent).filter(Agent.id == TEST_AGENT_ID).first()
+        if existing:
+            yield
+            return
+
+        # Create test agent
+        agent = Agent(
+            id=TEST_AGENT_ID,
+            name="Integration Test Agent",
+            permissions=["test_action"],
+            max_single_amount=100.00,
+            daily_cap=1000.00,
+            status="active",
+            shared_secret=TEST_AGENT_SECRET,
+        )
+        db.add(agent)
+        db.commit()
+        yield
+    finally:
+        # Cleanup: remove test agent
+        try:
+            db.query(Agent).filter(Agent.id == TEST_AGENT_ID).delete()
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+
+
 class TestIdentityIntegration:
     """Integration tests for D1's database + D2's verify_identity()."""
 

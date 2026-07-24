@@ -10,6 +10,48 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+TEST_AGENT_ID = "c90566c8-6300-4a69-8fef-56688c4a4e38"
+TEST_AGENT_SECRET = "test-secret-123"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def seed_test_agent():
+    """Seed the test agent required for integration tests."""
+    import json
+    from db.base import SessionLocal
+    from db.models.agent import Agent
+
+    db = SessionLocal()
+    try:
+        # Check if agent already exists
+        existing = db.query(Agent).filter(Agent.id == TEST_AGENT_ID).first()
+        if existing:
+            yield
+            return
+
+        # Create test agent
+        agent = Agent(
+            id=TEST_AGENT_ID,
+            name="Integration Test Agent",
+            permissions=["test_action"],
+            max_single_amount=100.00,
+            daily_cap=1000.00,
+            status="active",
+            shared_secret=TEST_AGENT_SECRET,
+        )
+        db.add(agent)
+        db.commit()
+        yield
+    finally:
+        # Cleanup: remove test agent
+        try:
+            db.query(Agent).filter(Agent.id == TEST_AGENT_ID).delete()
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+
 
 class TestStartupWiring:
     """Tests that main.py bootstrap wires dependencies correctly."""
@@ -25,7 +67,7 @@ class TestStartupWiring:
         set_agent_lookup(D1AgentLookup())
 
         # Test that it works with a real agent
-        result = verify_identity("c90566c8-6300-4a69-8fef-56688c4a4e38", "test-secret-123")
+        result = verify_identity(TEST_AGENT_ID, TEST_AGENT_SECRET)
 
         assert result.valid is True, "Wired lookup should work with real agent"
 
@@ -66,8 +108,8 @@ class TestBootstrapFunction:
         bootstrap_dependencies()
 
         # Verify both services work
-        identity_result = verify_identity("c90566c8-6300-4a69-8fef-56688c4a4e38", "test-secret-123")
+        identity_result = verify_identity(TEST_AGENT_ID, TEST_AGENT_SECRET)
         assert identity_result.valid is True, "Identity should work after bootstrap"
 
-        runtime_status = check_runtime_status("c90566c8-6300-4a69-8fef-56688c4a4e38")
+        runtime_status = check_runtime_status(TEST_AGENT_ID)
         assert runtime_status.available is True, "Runtime check should work after bootstrap"

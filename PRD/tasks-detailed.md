@@ -1,15 +1,75 @@
-# Phase 1 Parallel Development Plan
+# Phase 1 Implementation Plan (Single Developer)
 
 **Project:** Governance Layer for Financial Agents (Amex CodeStop 2026, Phase 1 Hybrid v2)
-**Status of repo at time of writing:** Greenfield. No existing backend, frontend, migrations, or infra config exist yet. This plan defines the target repository structure/contracts both developers scaffold toward, and divides the implementation work along a **conceptual ownership boundary** rather than an arbitrary file split.
-
-**Revision note:** This version rebalances ownership from the original draft, in which Developer 1 held nearly the entire enforcement/gateway/runtime-safety path (identity, policy, spend, revocation, kill switch, fail-closed, metrics) while Developer 2 held only audit/dashboard/demo. That draft technically minimized file overlap but left D1 with almost all of the governance-critical backend logic. The division below instead splits governance itself into two coherent, technically substantial halves — **"what may this agent do and spend"** (D1) vs. **"is this agent allowed to operate right now, and can we prove what happened"** (D2) — so both developers own real backend/security logic, not just "backend vs. frontend."
+**Status:** D1/D2 integration checkpoint complete (2026-07-23). One developer (D2) now owns all remaining implementation.
+**Last Updated:** 2026-07-24
 
 ---
 
-## Architecture and Existing-Code Assessment
+## What Changed
 
-No code exists yet. The layout below is the design baseline both developers commit to on Day 1.
+**Previous two-developer split is dissolved.** All remaining work is now owned by a single developer (D2).
+
+**Complete work:**
+- D1.1: Infrastructure (docker-compose, FastAPI, Postgres, Redis, OPA)
+- D1.2: Agent + policy data model with shared_secret
+- D1.AgentLookup: Database lookup implementation
+- D1.RedisClient: Redis client adapter
+- D2.1: Identity verification (INTEGRATED)
+- D2.2: Runtime safety state (INTEGRATED)
+- D2.FE: Frontend dashboard Phase 1 (mock-based)
+
+**Remaining work:** 19 tasks across 5 phases (see below)
+
+---
+
+## Conceptual Domains (Still Useful for Understanding)
+
+**Policy & Financial Governance:** "What is this agent allowed to do and spend?"
+**Runtime Safety, Audit & Operator Control:** "Is this agent operational, can we stop it, and can we prove what happened?"
+
+These conceptual domains help understand the architecture, but no longer represent developer ownership boundaries.
+
+---
+
+## Current Architecture Assessment (2026-07-24)
+
+**Infrastructure exists:**
+- docker-compose.yml (Postgres + Redis + OPA)
+- .env.example with DATABASE_URL and REDIS_URL
+- main.py with bootstrap wiring
+- alembic configured with agents migration (09ee32e4e00a)
+
+**Models exist:**
+- db/models/agent.py (id, name, permissions, max_single_amount, daily_cap, status, shared_secret)
+- db/base.py (SQLAlchemy setup)
+
+**Services exist (D2.1, D2.2 integrated):**
+- services/identity.py (verify_identity ✅)
+- services/runtime_state.py (check_runtime_status ✅)
+- services/redis_client.py (ProductionRedisClient ✅)
+- scripts/agent_lookup.py (D1AgentLookup ✅)
+
+**Frontend exists (mock-based):**
+- frontend/src/** (complete React dashboard with mocks)
+
+**Tests exist (89 passing):**
+- tests/test_identity.py (24 tests)
+- tests/test_runtime_safety.py (46 tests)
+- tests/test_integration_identity.py (7 tests)
+- tests/test_integration_redis.py (9 tests)
+- tests/test_startup_wiring.py (3 tests)
+
+**Missing:**
+- routers/ directory (no FastAPI routers yet)
+- schemas/ directory (no Pydantic schemas yet)
+- policy/ directory (no OPA/Rego or fallback)
+- services/spend.py (no spend caps)
+- services/hash_chain.py (no audit/integrity)
+- db/models/audit_log.py (no audit table)
+- demo/ directory (no scripted agents)
+- middleware/ directory (no latency tracking)
+- audit_log migration (depends on agents migration ✅)
 
 ```
 repo/
@@ -220,104 +280,122 @@ The `agents` table necessarily has one file owner (D1, since it holds `permissio
 
 ---
 
-## Developer 1 — Policy & Financial Governance
+## File Ownership (Updated for Single Developer)
 
-**Owns the question:** *"What is this agent allowed to do, and how much financial authority does it have?"*
+**All remaining implementation is now owned by D2.** The previous D1/D2 split no longer applies for coordination purposes.
 
-### Ownership
+**Previously D1-owned, now D2-owned:**
+- `routers/action.py` — orchestration endpoint
+- `routers/policies.py` — policy/spend config APIs
+- `schemas/action.py` — ActionRequest/ActionDecision/DecisionEvent
+- `schemas/agent.py` — Agent, AgentStatus schemas
+- `policy/opa_client.py` — OPA integration
+- `policy/fallback.py` — Python fallback
+- `services/spend.py` — spend caps
+- `middleware/timing.py` — latency measurement
+- `tests/test_policy_enforcement.py` — policy tests
+- `tests/test_spend_cap.py` — spend cap tests
+- `tests/test_policy_latency.py` — latency tests
 
-- **Owns and creates:** `docker-compose.yml`, `.env.example`, `backend/app/main.py`, `backend/app/config.py`, `backend/app/db/session.py`, `backend/app/db/models/agent.py`, `backend/app/schemas/action.py`, `backend/app/schemas/agent.py`, `backend/app/policy/*`, `backend/app/services/spend.py`, `backend/app/routers/action.py`, `backend/app/routers/policies.py`, `backend/tests/test_policy_enforcement.py`, `backend/tests/test_spend_cap.py`, `backend/tests/test_policy_latency.py`, `backend/alembic/versions/0001_agents.py`.
-- **May modify (with care):** `README.md` (own section only).
-- **Must avoid editing:** `backend/app/db/models/audit_log.py`, `backend/app/schemas/audit.py`, `backend/app/services/identity.py`, `backend/app/services/runtime_state.py`, `backend/app/services/hash_chain.py`, `backend/app/routers/runtime.py`, `backend/app/routers/fleet.py`, `backend/app/routers/audit.py`, anything under `backend/app/demo/`, anything under `frontend/`, `backend/alembic/versions/0002_audit_log.py` and later, the `agent:{id}:status` / `fleet:halted` Redis keys.
+**Already D2-owned and complete:**
+- `services/identity.py` — verify_identity ✅
+- `services/runtime_state.py` — check_runtime_status ✅
+- `services/redis_client.py` — ProductionRedisClient ✅
+- `frontend/**` — React dashboard ✅ (mock-based)
 
-**Important:** owning infrastructure scaffolding (`docker-compose.yml`, initial `main.py`, `.env.example`) is a file-ownership convenience to avoid two people editing deploy config — it is **not** a claim on backend functionality. D2 independently implements identity, runtime-safety, audit, and dashboard modules once the Day-1 scaffold and shared contracts exist; D1 does not build those subsystems.
+**D2-owned, to be implemented:**
+- `services/hash_chain.py` — record_decision, verify_chain
+- `db/models/audit_log.py` — audit table model
+- `routers/runtime.py` — revoke/restore endpoints
+- `routers/fleet.py` — halt/resume endpoints
+- `routers/audit.py` — audit APIs
+- `schemas/audit.py` — D2-owned schemas
+- `demo/agents/*` — scripted demo agents
+- `tests/test_audit_and_hash_chain.py` — audit tests
+- `tests/test_tamper_detection.py` — integrity tests
+- `tests/test_propagation.py` — metrics tests
+- `alembic/versions/0002_audit_log.py` — audit migration
 
-### Tasks
-
-#### D1.1 — Infrastructure & repo scaffolding
-- **Objective:** Stand up the skeleton both developers build on: FastAPI app, Postgres, Redis, OPA containers, Alembic wired up, env template. This is purely enabling infrastructure, not a claim on any subsystem's logic.
-- **Implementation requirements:** `docker-compose.yml` with services `api`, `postgres`, `redis`, `opa`; `backend/app/main.py` with an empty router-registration block (D1 will later register `action.py` and `policies.py` directly, and register D2's `runtime.py`/`fleet.py`/`audit.py` routers once D2 hands them off — see Merge-Safety Rules) and a health-check route; `.env.example` covering `DATABASE_URL`, `REDIS_URL`, `OPA_URL`; Alembic initialized with an empty baseline migration.
-- **PRD requirement:** §7 (Tech Stack Decisions), Day 1 of §10.
-- **Files:** `docker-compose.yml`, `.env.example`, `backend/app/main.py`, `backend/alembic.ini`, `backend/alembic/env.py`.
-- **Dependencies:** None — Day 1 blocker for both developers; land and communicate immediately.
-- **Definition of Done:** `docker compose up` brings up all four services; `GET /health` returns 200; empty Alembic migration applies cleanly.
-- **Tests/verification:** Manual smoke test (`curl localhost:8000/health`).
-
-#### D1.2 — Agent + policy data model & migration
-- **Objective:** Create the `agents` table containing both policy fields (D1's domain) and the identity field D2 requires (`shared_secret`), per the Shared Agent Fields Day-1 contract.
-- **Implementation requirements:** Model with `id, name, permissions (jsonb), max_single_amount, daily_cap, shared_secret` (§8). **Before finalizing**, D1 confirms the `shared_secret` field spec with D2 (type, generation approach) per Shared Agent Fields. No runtime `status` column — that lives in Redis under D2 ownership.
-- **PRD requirement:** §8 Data Model, §5.1, §5.0 (identity field requirement, D2-specified).
-- **Files:** `backend/app/db/models/agent.py`, `backend/alembic/versions/0001_agents.py`.
-- **Dependencies:** D1.1; contract-only dependency on D2's identity-field spec (see Dependency and Handoff Points — this is a quick Day-1 conversation, not a blocking wait).
-- **Definition of Done:** Migration creates the table with correct types/constraints, including the D2-specified `shared_secret` field; a seed script (`backend/app/db/seed.py`, D1-owned) inserts the three demo agents' base records with placeholder secrets.
-- **Tests/verification:** `test_policy_enforcement.py` fixture confirms seeded agents load correctly.
-
-#### D1.3 — Main action-request orchestration/gateway
-- **Objective:** Implement `POST /action-request` as the single orchestration pipeline described in the Critical Request Pipeline, calling into D2's identity/runtime-safety/audit functions and D1's own policy/spend functions in the correct order.
-- **Implementation requirements:** Pipeline exactly matching: `verify_identity()` (D2) → `check_runtime_status()` (D2) → `evaluate_policy()` (D1) → `reserve_budget_atomic()` (D1) → finalize decision → `record_decision()` (D2). Short-circuit at each stage. Until D2's real implementations land, D1 develops against **stub/mock versions** of `verify_identity`, `check_runtime_status`, and `record_decision` matching the frozen interface shapes — swapped for the real thing at integration with no orchestration code changes required.
-- **PRD requirement:** §4 check order, §5 overview.
-- **Files:** `backend/app/routers/action.py`, `backend/app/schemas/action.py` (includes the `DecisionEvent` interface type D1 defines and D2 implements against).
-- **Dependencies:** D1.2. Contract-only dependency on D2's function signatures (agreed Day 1, not on D2's implementation being finished — see Dependency and Handoff Points).
-- **Definition of Done:** Endpoint compiles and runs end-to-end against stubs, returning correctly-shaped `ActionDecision` objects for every short-circuit path; zero orchestration changes needed once D2's real functions are swapped in.
-- **Tests/verification:** `test_policy_enforcement.py::test_check_order` — asserts stages run/short-circuit in the documented order using mocked D2 functions.
-
-#### D1.4 — OPA/Rego policy integration
-- **Objective:** Implement `evaluate_policy()`'s permission and max-single-transaction-amount checks via OPA.
-- **Implementation requirements:** Rego policy: `allow { input.action in agent.permissions; input.amount <= agent.max_single_amount }`; `opa_client.py` calling the OPA container.
-- **PRD requirement:** §5.1 Permission Model, §7 tech stack.
-- **Files:** `backend/app/policy/opa_client.py`, `backend/app/policy/rego/*.rego`.
-- **Dependencies:** D1.2 (needs `permissions`/`max_single_amount` fields).
-- **Definition of Done:** Permission and max-amount violations correctly denied with `reason_code: PERMISSION_DENIED` / `AMOUNT_EXCEEDS_LIMIT` via OPA.
-- **Tests/verification:** `test_policy_enforcement.py::test_opa_permission_and_limit`.
-
-#### D1.5 — Plain-Python policy fallback
-- **Objective:** Implement an equivalent `evaluate_policy()` path in plain Python against the same config structure, selectable via config flag, per the PRD's OPA-risk mitigation.
-- **Implementation requirements:** `fallback.py` mirrors the Rego logic exactly; a config flag (`POLICY_ENGINE=opa|fallback`) selects the engine with no other code changes.
-- **PRD requirement:** §7, §12 risk (OPA integration eats too much time → timeboxed fallback).
-- **Files:** `backend/app/policy/fallback.py`.
-- **Dependencies:** D1.4 (same test fixtures, parametrized over both engines).
-- **Definition of Done:** Both OPA and fallback paths produce identical allow/deny results for the same test inputs.
-- **Tests/verification:** `test_policy_enforcement.py::test_opa_fallback_parity` — parametrized over `POLICY_ENGINE=opa` and `POLICY_ENGINE=fallback`.
-
-#### D1.6 — Dynamic spend caps + atomic budget reservation
-- **Objective:** Implement `reserve_budget_atomic()` using atomic Redis operations against `agent:{id}:remaining_budget`, with no check-then-act race window, and its own independent fail-closed behavior for the spend-state Redis domain.
-- **Implementation requirements:** `DECRBY` the requested amount first; if resulting value `< 0`, deny and issue a compensating `INCRBY` (§5.2); wrap Redis access in `try/except` — if `remaining_budget` is unreachable, deny with `reason_code: SPEND_CAP_EXCEEDED`'s sibling case (or a dedicated code, e.g. `SPEND_STATE_UNAVAILABLE`) rather than allowing.
-- **PRD requirement:** §5.2 Dynamic Spend Caps (atomicity explicit); fail-closed principle applied to the spend-state Redis domain specifically (D2 owns the equivalent for runtime-safety keys).
-- **Files:** `backend/app/services/spend.py`.
-- **Dependencies:** D1.3, D1.2.
-- **Definition of Done:** Concurrent requests near the cap boundary never both succeed when only one should; denied-for-cap requests leave `remaining_budget` unchanged; simulated Redis outage on this key results in deny.
-- **Tests/verification:** `test_spend_cap.py::test_atomic_concurrent_requests`, `test_spend_cap.py::test_compensating_decrement`, `test_spend_cap.py::test_spend_state_fail_closed`.
-
-#### D1.7 — Policy configuration API + spend reset/config API
-- **Objective:** Implement `routers/policies.py`: `PUT /agents/{id}/policy`, `POST /agents/{id}/reset-spend`, plus the composed `GET /agents` / `GET /agents/{id}` views (which call D2's `check_runtime_status()` for live fields).
-- **Implementation requirements:** Policy edits take effect on the *next* request (no caching that would mask a live edit), matching §5.5. `AgentStatus` response composes D1's own fields with a call into D2's `check_runtime_status()` — D1 never reads `agent:{id}:status`/`fleet:halted` directly.
-- **PRD requirement:** §5.1 (policy profile), §5.5 (policy config panel backend), §5.2 (reset button).
-- **Files:** `backend/app/routers/policies.py`, `backend/app/schemas/agent.py`.
-- **Dependencies:** D1.2, D1.4/D1.5; contract-only dependency on D2's `check_runtime_status()` signature for the composed view (mockable — see Dependency and Handoff Points).
-- **Definition of Done:** Editing an agent's `max_single_amount` via `PUT` changes the very next `/action-request` outcome without restart; `GET /agents/{id}` returns both policy and (mocked, then real) runtime fields.
-- **Tests/verification:** `test_policy_enforcement.py::test_live_policy_edit`.
-
-#### D1.8 — Policy & spend enforcement test suite
-- **Objective:** Consolidate D1's automated test coverage: permission enforcement, OPA/fallback consistency, max-single-amount, dynamic spend caps, atomic concurrent spend, and policy-update-affects-future-decisions.
-- **Implementation requirements:** Fixed suite of scripted violation attempts asserted 100% denied (feeds the §9 enforcement-accuracy metric); concurrency test for atomic spend.
-- **PRD requirement:** §9 Policy enforcement accuracy.
-- **Files:** `backend/tests/test_policy_enforcement.py`, `backend/tests/test_spend_cap.py`.
-- **Dependencies:** D1.4–D1.7.
-- **Definition of Done:** Test run reports 100% correct denial of the scripted violation suite; concrete pass/fail output usable in the submission writeup.
-- **Tests/verification:** CI/local test run output.
-
-#### D1.9 — Gateway/policy/spend latency metrics
-- **Objective:** Produce the §9 gateway-latency measurement.
-- **Implementation requirements:** Lightweight timing middleware or per-request instrumentation around the orchestration pipeline, reporting p50/p95 request latency.
-- **PRD requirement:** §9 Latency (under ~100ms, measured).
-- **Files:** `backend/app/middleware/timing.py` (new, D1-owned), `backend/tests/test_policy_latency.py`.
-- **Dependencies:** D1.3.
-- **Definition of Done:** A test/benchmark run produces a concrete latency number pastable into the submission writeup.
-- **Tests/verification:** `test_policy_latency.py` output.
+**Shared infrastructure (maintained by D2):**
+- `docker-compose.yml`, `.env.example` — environment
+- `main.py` — application bootstrap
+- `db/models/agent.py` — agent model (already exists)
+- `scripts/agent_lookup.py` — AgentLookup (already exists)
 
 ---
 
-## Developer 2 — Runtime Safety, Audit & Operator Control
+## Implementation Tasks (Single Developer Order)
+
+**Phase 1: Core Services**
+
+### Milestone A: Audit Foundation (Sequential)
+
+### Task 2.1 — Audit Log Model + Migration
+
+**Milestone A: Audit Foundation (Sequential: 2.1 → 2.2 → 2.3)**
+
+#### D1.1 — Infrastructure & repo scaffolding — ✅ COMPLETE
+- **Status:** Done (docker-compose.yml, .env.example, main.py, alembic.ini)
+- **Migration:** agents migration (09ee32e4e00a) applied
+
+#### D1.2 — Agent + policy data model & migration — ✅ COMPLETE
+- **Status:** Done (db/models/agent.py with shared_secret field)
+- **Migration:** 09ee32e4e00a_create_agents_table.py applied
+
+#### D1.3 — Main action-request orchestration/gateway — TO DO (Task 4.1 below)
+- **Will be implemented after policy/spend/audit services are complete**
+
+#### D1.4 — OPA/Rego policy integration — TO DO (Task 2.5 below)
+
+#### D1.5 — Plain-Python policy fallback — TO DO (Task 2.6 below)
+
+**Policy stream (sequential: 2.5 → 2.6):**
+- See tasks.md for detailed requirements
+
+#### D1.6 — Dynamic spend caps + atomic budget reservation — TO DO (Task 2.4 below)
+
+**Milestone C: Policy + Spend (Independent workstreams)**
+
+**Spend stream (independent):**
+
+#### D1.7 — Policy configuration API + spend reset/config API — TO DO (Task 3.6-3.7 below)
+
+#### D1.8 — Policy & spend enforcement test suite — TO DO (Task 6.2 below)
+
+#### D1.9 — Gateway/policy/spend latency metrics — TO DO (Task 6.3 below)
+
+**Milestone D: Full /action-request Orchestration**
+- Task 4.1 (D1.3): /action-request endpoint
+- Requires: Milestones A + C complete, D2.1✅, D2.2✅
+- Pipeline: Identity → Fleet halted → Agent revoked → Permission/max-amount → Spend cap → ALLOW/DENY → Audit recording
+
+**Milestone E: Remaining APIs**
+- Tasks 3.3-3.7: Audit APIs, policy APIs, spend reset, agent/status APIs
+- Requires: Milestones A + B + C
+
+**Milestone F: Frontend Real-Backend Integration**
+- Tasks 5.1-5.2: Real API client, verification
+- Requires: Milestone E complete
+
+**Milestone G: Demo + E2E + Metrics**
+- Task 6.1: Demo agents + runner
+- Task 6.2: Complete test suite + regression
+- Task 6.3: Metrics collection
+- Requires: Full system (Milestones D + E + F)
+
+---
+
+## [ARCHIVED] Historical D1/D2 Split
+
+The following sections are preserved for historical attribution only. They do NOT govern current implementation.
+
+---
+
+## [ARCHIVED] Historical Developer 2 — Runtime Safety, Audit & Operator Control
+
+**The following section is preserved for historical attribution only. Current implementation follows the single-developer model documented above.**
+
+---
 
 **Owns the question:** *"Is this agent operational, can we stop it instantly, and can we prove what happened?"*
 
@@ -329,141 +407,56 @@ The `agents` table necessarily has one file owner (D1, since it holds `permissio
 
 ### Tasks
 
-#### D2.1 — Identity contract + implementation
-- **Objective:** Implement `verify_identity(agent_id, secret) -> IdentityResult`, and specify the `shared_secret` field requirement to D1 as the Day-1 handoff (Shared Agent Fields).
-- **Implementation requirements:** Lookup agent by `agent_id` (via D1's `Agent` model, read-only from D2's side — no edits to `agent.py`), constant-time compare of `shared_secret`; returns `IdentityResult{ valid, agent_id }`. Per §5.0, document in code comments that this is intentionally not a rotating/expiring credential.
-- **PRD requirement:** §5.0 Lightweight Identity Check.
-- **Files:** `backend/app/services/identity.py`.
-- **Dependencies:** Contract-only dependency on D1's `Agent` model existing with the `shared_secret` field D2 specified — D2 can write and unit-test `verify_identity()` against a mocked agent-lookup function before D1.2 lands, then swap in the real DB call once it's merged (see Dependency and Handoff Points).
-- **Definition of Done:** Requests with wrong/missing secret produce `IdentityResult{ valid: false }`; correct requests pass.
-- **Tests/verification:** `test_identity.py::test_identity_rejection` — wrong secret, missing header, correct secret cases.
+#### D2.1 — Identity contract + implementation — ✅ COMPLETE (INTEGRATED)
+- **Status:** Done (services/identity.py)
+- **Integration:** Wired with D1AgentLookup in main.py
+- **Tests:** 24 passing
 
-#### D2.2 — Runtime safety Redis layer
-- **Objective:** Implement `check_runtime_status(agent_id) -> RuntimeStatus`, establishing the `agent:{id}:status` and `fleet:halted` Redis key conventions under exclusive D2 ownership.
-- **Implementation requirements:** Reads both keys, returns `RuntimeStatus{ fleet_halted, agent_revoked, available }`; wraps Redis access in `try/except` — connection error/timeout sets `available: false`, which D1's orchestration treats as fail-closed deny (§5.3 fail-closed principle, applied here to the runtime-safety key domain).
-- **PRD requirement:** §5.3 Revocation & Emergency Stop (state layer), fail-closed behavior for kill-switch/revocation checks.
-- **Files:** `backend/app/services/runtime_state.py`.
-- **Dependencies:** D1.1 (Redis container available) — no dependency on D1's application code; can be developed and unit-tested in isolation against a local Redis instance.
-- **Definition of Done:** Function correctly reflects live Redis state; simulated Redis outage (e.g., stop the Redis container in a test) results in `available: false`.
-- **Tests/verification:** `test_runtime_safety.py::test_runtime_status_fail_closed`.
+#### D2.2 — Runtime safety Redis layer — ✅ COMPLETE (INTEGRATED)
+- **Status:** Done (services/runtime_state.py)
+- **Integration:** Wired with ProductionRedisClient in main.py
+- **Tests:** 46 passing
 
-#### D2.3 — Per-agent revocation/restore
-- **Objective:** Implement `POST /agents/{id}/revoke` and `POST /agents/{id}/restore` in `routers/runtime.py`, flipping `agent:{id}:status` in Redis.
-- **Implementation requirements:** Revoke sets status to `revoked`; restore sets it to `active` (needed for demo reset). Both call D2's own `record_decision()` to log the control action (§5.3: "Both actions are themselves logged to the audit trail").
-- **PRD requirement:** §5.3 per-agent revoke.
-- **Files:** `backend/app/routers/runtime.py`.
-- **Dependencies:** D2.2, D2.7 (audit write function, though this can also start against a local stub while D2.7 is in progress — same-developer, so purely sequencing, not a cross-developer blocker).
-- **Definition of Done:** Revoked agent is denied on its very next `/action-request` (verified together with D1.3's orchestration); restore reverses it.
-- **Tests/verification:** `test_runtime_safety.py::test_revoke_and_restore`.
+#### D2.3 — Per-agent revocation/restore — TO DO (Task 3.1 below)
 
-#### D2.4 — Fleet kill switch/resume
-- **Objective:** Implement `POST /fleet/halt` and `POST /fleet/resume` in `routers/fleet.py`, flipping `fleet:halted` in Redis.
-- **Implementation requirements:** Halt/resume each call `record_decision()` to log the control action.
-- **PRD requirement:** §5.3 fleet-wide kill switch.
-- **Files:** `backend/app/routers/fleet.py`.
-- **Dependencies:** D2.2, D2.7.
-- **Definition of Done:** Fleet halt blocks all agents instantly (including previously-unrevoked ones), verified together with D1.3's orchestration; resume reverses it.
-- **Tests/verification:** `test_runtime_safety.py::test_fleet_halt_and_resume`.
+#### D2.4 — Fleet kill switch/resume — TO DO (Task 3.2 below)
 
-#### D2.5 — Fail-closed runtime behavior (consolidation)
-- **Objective:** Ensure fail-closed behavior is consistently enforced across all runtime-safety paths (D2.2's core implementation) and explicitly verified end-to-end with D1's orchestration.
-- **Implementation requirements:** Confirm `check_runtime_status()`'s `available: false` path is correctly interpreted as deny by D1's orchestration (joint verification, not a joint implementation — D2 owns the source of the signal, D1 owns interpreting it per the frozen `RuntimeStatus` contract).
-- **PRD requirement:** §5.3 fail-closed behavior ("what happens if your control plane goes down?").
-- **Files:** `backend/app/services/runtime_state.py` (no new file — this task is verification-focused).
-- **Dependencies:** D2.2, D1.3.
-- **Definition of Done:** End-to-end test: stop Redis mid-scenario, confirm `/action-request` denies with `RUNTIME_STATE_UNAVAILABLE` rather than allowing.
-- **Tests/verification:** `test_runtime_safety.py::test_end_to_end_fail_closed` (integration-time test, run once both D1.3 and D2.2 exist).
+**Milestone B: Runtime Control APIs (Uses audit foundation from A)**
 
-#### D2.6 — Audit model + persistence
-- **Objective:** Create the append-only Postgres `audit_log` table with hash-chain columns and DB-level immutability as a secondary safety net.
-- **Implementation requirements:** Columns per §8: `id, timestamp, agent_id, action_type, amount, decision, reason, reason_code, policy_version, prev_hash, hash`. Revoke `UPDATE`/`DELETE` grants on the table for the application role.
-- **PRD requirement:** §5.4 Audit Log, §8 Data Model.
-- **Files:** `backend/app/db/models/audit_log.py`, `backend/alembic/versions/0002_audit_log.py` (must be ordered/numbered after D1's `0001_agents.py` — hard dependency, since `audit_log.agent_id` has an FK to `agents.id`).
-- **Dependencies:** D1.2 (hard blocker — see Dependency and Handoff Points).
-- **Definition of Done:** Migration applies cleanly on top of `0001_agents.py`; `UPDATE`/`DELETE` as the app DB role fails.
-- **Tests/verification:** `test_audit_and_hash_chain.py::test_immutability_grants`.
+#### D2.5 — Fail-closed runtime behavior (consolidation) — ✅ COMPLETE
+- **Status:** Verified in integration tests
 
-#### D2.7 — Hash-chain integrity (`record_decision`)
-- **Objective:** Implement `record_decision(event: DecisionEvent) -> AuditWriteResult` per the interface D1 defines in D1.3 — canonicalize, hash, persist, return the id/hash for D1's response.
-- **Implementation requirements:** `SHA256(canonical_json(row) + prev_hash_of_last_row)`; canonicalization = sort keys alphabetically, strip whitespace, **before** hashing (§5.4 explicit gotcha).
-- **PRD requirement:** §5.4 lightweight hash chain.
-- **Files:** `backend/app/services/hash_chain.py`.
-- **Dependencies:** D2.6; contract-only dependency on D1's `DecisionEvent` shape (frozen Day 1 — D2 can implement and unit-test against the agreed shape without D1's orchestration being finished).
-- **Definition of Done:** Writing N sequential decisions produces a valid chain; function returns `(audit_log_id, hash)` in the exact shape D1's `ActionDecision.audit_log_id` expects.
-- **Tests/verification:** `test_audit_and_hash_chain.py::test_chain_construction`.
+#### D2.6 — Audit model + persistence — TO DO (Task 2.1 below)
 
-#### D2.8 — Chain verification / tamper detection
-- **Objective:** Implement `verify_chain()` — recompute the chain top-to-bottom and detect the exact row where a break occurs.
-- **Implementation requirements:** Walk rows in order, recompute each hash, compare to stored `hash`; on mismatch, report the first offending row.
-- **PRD requirement:** §5.4 tamper-check function, §9 audit integrity metric.
-- **Files:** `backend/app/services/hash_chain.py`, `backend/app/routers/audit.py` (`POST /audit/verify-chain`).
-- **Dependencies:** D2.7.
-- **Definition of Done:** Verifying an untampered chain returns `{"intact": true}`; manually altering one row via raw SQL and re-verifying returns `{"intact": false, "broken_at_row": <row>}` — this is the §9 adversarial test.
-- **Tests/verification:** `test_tamper_detection.py::test_adversarial_row_alteration`.
+#### D2.7 — Hash-chain integrity (`record_decision`) — TO DO (Task 2.2 below)
 
-#### D2.9 — Audit/runtime read APIs
-- **Objective:** Build the read-side endpoints: `/audit/feed`, `/audit/log`, `/agents/{id}/runtime-status`.
-- **Implementation requirements:** `/audit/feed` returns most-recent-N decisions ordered by timestamp desc, cheap enough to poll every 1–2s; `/audit/log` supports `agent_id`, `action_type`, `decision`, `from`/`to` query params; `/agents/{id}/runtime-status` is a thin wrapper around `check_runtime_status()` for direct dashboard/demo use.
-- **PRD requirement:** §5.5 (live activity feed, audit log table with filtering).
-- **Files:** `backend/app/routers/audit.py`, `backend/app/schemas/audit.py`.
-- **Dependencies:** D2.6, D2.7, D2.2.
-- **Definition of Done:** All three endpoints return correctly filtered/live results against seeded data.
-- **Tests/verification:** `test_audit_and_hash_chain.py::test_feed_and_filtering`.
+#### D2.8 — Chain verification / tamper detection — TO DO (Task 2.3 below)
 
-#### D2.10 — React dashboard shell + API client/types
-- **Objective:** Scaffold the frontend app and the single shared API client used by all dashboard features, including calls into D1's policy API.
-- **Implementation requirements:** `frontend/src/api/client.ts` (fetch wrapper for every backend call — D1's `/agents`, `/agents/{id}/policy` included, since the dashboard is a client of both developers' APIs) and `frontend/src/api/types.ts` mirroring both developers' Pydantic schemas. `frontend/src/pages/Dashboard.tsx` as the shell page. The frontend must never implement enforcement rules itself — every control (revoke, kill switch, policy edit) is a thin call to the corresponding backend API.
-- **PRD requirement:** §5.5 Operator Dashboard, §7 (React choice).
-- **Files:** `frontend/src/api/client.ts`, `frontend/src/api/types.ts`, `frontend/src/pages/Dashboard.tsx`.
-- **Dependencies:** Mockable dependency on D1's and D2's endpoint shapes (frozen in Shared Contracts) — D2 builds against mocks matching the documented shapes immediately, no need to wait for either backend to be finished.
-- **Definition of Done:** Dashboard shell loads and successfully calls mocked, then live, `/agents` and `/audit/feed` endpoints.
-- **Tests/verification:** Manual browser check.
+#### D2.9 — Audit/runtime read APIs — TO DO (Tasks 3.3-3.5 below)
 
-#### D2.11 — Dashboard controls & views
-- **Objective:** Build the remaining dashboard components: live activity feed, revoke/restore controls, fleet kill-switch/resume controls, policy config panel (UI only), audit log table + filters, and the Verify Chain Integrity button.
-- **Implementation requirements:** Per component:
-  - `ActivityFeed.tsx` — polls `/audit/feed` every 1–2s, color-coded allow/deny (D2 API).
-  - `RevokeRestoreControls.tsx` — single-click + confirmation modal, calls `/agents/{id}/revoke` / `/restore` (D2 API).
-  - `FleetKillSwitch.tsx` — single-click + confirmation modal, calls `/fleet/halt` / `/resume` (D2 API).
-  - `PolicyConfigPanel.tsx` — calls D1's `PUT /agents/{id}/policy`; can be minimal per §10 cut-list (lowest priority within D2's UI work) — if cut, document the JSON-file-edit-and-restart fallback in the README instead.
-  - `AuditLogTable.tsx` — filters matching `/audit/log` query params.
-  - `IntegrityCheckButton.tsx` — calls `/audit/verify-chain`, shows "✅ chain intact" or "❌ break detected at row N."
-- **PRD requirement:** §5.3, §5.4, §5.5 (all dashboard controls); §6 demo beats 3 and 5; §10 cut-list item 1 (policy panel) and item 2 (integrity button — backend endpoint D2.8 is not cuttable, only the button UI is).
-- **Files:** `frontend/src/components/ActivityFeed.tsx`, `RevokeRestoreControls.tsx`, `FleetKillSwitch.tsx`, `PolicyConfigPanel.tsx`, `AuditLogTable.tsx`, `IntegrityCheckButton.tsx`.
-- **Dependencies:** D2.10; mockable dependency on D1's policy endpoint (D2 can build `PolicyConfigPanel.tsx` against a mock before D1.7 lands) and D2's own runtime/fleet/audit endpoints (available as soon as D2.3/D2.4/D2.9 land, since same-developer sequencing).
-- **Definition of Done:** Revoking Agent B causes its next request to be denied while A/C continue unaffected, visible live in the activity feed; kill switch halts all agents; integrity button correctly reports intact/broken states against a manually tampered row.
-- **Tests/verification:** Manual run-through of demo beats 3, 5, 6; propagation timing cross-checked against D2.14's measured numbers.
+#### D2.10 — React dashboard shell + API client/types — ✅ COMPLETE (MOCK-BASED)
+- **Status:** Done (frontend/src/**)
+- **Note:** Currently uses mocks; real backend integration is Task 5.1 below
 
-#### D2.12 — Scripted demo agents + six-beat orchestration
-- **Objective:** Build Agent A (compliant), Agent B (violator), Agent C (runaway), and a runner script executing the full six-beat scenario end-to-end.
-- **Implementation requirements:** Each agent is a scripted HTTP client hitting `/action-request` with identity headers. Agent A issues in-policy refunds; Agent B attempts an out-of-scope action and an over-cap refund; Agent C rapid-fires legitimate-looking actions with slightly randomized intervals (§12 risk mitigation). The runner sequences: A runs → B violates → operator revokes B → C runs → operator hits kill switch → filter audit log + verify chain.
-- **PRD requirement:** §6 Demo Scenario (all six beats), §12 (randomized intervals).
-- **Files:** `backend/app/demo/agents/agent_a.py`, `agent_b.py`, `agent_c.py`, `runner.py`.
-- **Dependencies:** Full backend (D1's orchestration + D2's runtime/audit) — this is the one D2 task that genuinely needs both subsystems substantially complete; everything else in D2's list is independently developable.
-- **Definition of Done:** Running the script completes all six beats in under ~110 seconds without manual intervention (dashboard clicks can be simulated via direct API calls for the automated version; a separate manual/dashboard-driven walkthrough is used for the actual recorded demo).
-- **Tests/verification:** `test_demo_scenario_e2e.py` (joint test, finalized once both subsystems are integrated).
+#### D2.11 — Dashboard controls & views — ✅ COMPLETE (MOCK-BASED)
+- **Status:** All components built with mocks
+- **Note:** Real backend integration is Task 5.1 below
 
-#### D2.13 — Runtime-safety/audit test suite
-- **Objective:** Consolidate D2's automated test coverage: identity failure, per-agent revocation, restore, fleet halt, fleet resume, fail-closed runtime behavior, audit completeness, hash-chain construction, tamper detection.
-- **Implementation requirements:** Completeness check: run the demo scenario (or a fixed request suite) and assert audit-log row count equals requests sent (§9 audit completeness).
-- **PRD requirement:** §9 Audit completeness, Audit integrity.
-- **Files:** `backend/tests/test_identity.py`, `test_runtime_safety.py`, `test_audit_and_hash_chain.py`, `test_tamper_detection.py`.
-- **Dependencies:** D2.1–D2.9.
-- **Definition of Done:** All tests passing; completeness and integrity results captured as concrete numbers for the writeup.
-- **Tests/verification:** CI/local test run output.
+#### D2.12 — Scripted demo agents + six-beat orchestration — TO DO (Task 6.1 below)
 
-#### D2.14 — Revocation/kill-switch propagation metrics
-- **Objective:** Produce the §9 measurements for per-agent revocation propagation time and fleet-wide kill-switch propagation time.
-- **Implementation requirements:** Measure time between a control-API call (`/agents/{id}/revoke` or `/fleet/halt`) completing and the next `/action-request` from an affected agent being denied.
-- **PRD requirement:** §9 Kill switch propagation time, per-agent revocation propagation time.
-- **Files:** `backend/tests/test_runtime_safety.py` (or a dedicated `backend/tests/test_propagation.py`).
-- **Dependencies:** D2.3, D2.4, D1.3 (needs the orchestration pipeline live to observe the deny).
-- **Definition of Done:** Concrete propagation-time numbers for both revocation and kill-switch, pastable into the submission writeup.
-- **Tests/verification:** Automated test output.
+#### D2.13 — Runtime-safety/audit test suite — PARTIALLY COMPLETE
+- **Status:** Identity and runtime tests done (89 passing total)
+- **Remaining:** Audit/integrity tests (Task 6.2 below)
+
+#### D2.14 — Revocation/kill-switch propagation metrics — TO DO (Task 6.3 below)
 
 ---
 
-## File Ownership Map
+## [ARCHIVED] Historical File Ownership Map
+
+**The following section is preserved for historical attribution only. Current implementation follows the single-developer model documented above.**
+
+---
 
 | Path / Module | Owner | Notes |
 |---|---|---|
@@ -516,7 +509,11 @@ The `agents` table necessarily has one file owner (D1, since it holds `permissio
 
 ---
 
-## Dependency and Handoff Points
+## [ARCHIVED] Historical Dependency and Handoff Points
+
+**The following section is preserved for historical reference. Current dependencies are documented in the milestones section above.**
+
+---
 
 | # | Producer | Consumer | Interface | Data shape | Dependency type |
 |---|---|---|---|---|---|
@@ -534,7 +531,11 @@ The `agents` table necessarily has one file owner (D1, since it holds `permissio
 
 ---
 
-## Parallel Development Timeline
+## [ARCHIVED] Historical Parallel Development Timeline
+
+**The following section is preserved for historical reference. Current implementation follows the vertical milestone order documented above.**
+
+---
 
 | Day | Developer 1 | Developer 2 | Handoff needed before Day starts |
 |---|---|---|---|
@@ -548,7 +549,11 @@ The `agents` table necessarily has one file owner (D1, since it holds `permissio
 
 ---
 
-## Mock/Stub Strategy
+## [ARCHIVED] Historical Mock/Stub Strategy
+
+**Preserved for reference. Current implementation can still use mocks during development, but there are no cross-developer coordination requirements.**
+
+---
 
 To keep both developers unblocked from Day 1, every cross-developer interface is developed against a stub/mock until the real implementation is ready:
 

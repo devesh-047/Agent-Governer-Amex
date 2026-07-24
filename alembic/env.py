@@ -20,13 +20,14 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 import os
 import sys
+
 from dotenv import load_dotenv
 
 sys.path.append(os.getcwd())  # so `db.base` etc. are importable
 load_dotenv()
 
 from db.base import Base
-from db.models.agent import Agent  # noqa — import so it registers on Base.metadata
+from db.models import Agent, AuditLog  # noqa: F401 - register models on Base.metadata
 
 target_metadata = Base.metadata
 
@@ -62,18 +63,23 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])  # <-- add this
+    connection = config.attributes.get("connection")
+    if connection is None:
+        config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
         )
+
+        with connectable.connect() as connection:
+            context.configure(connection=connection, target_metadata=target_metadata)
+
+            with context.begin_transaction():
+                context.run_migrations()
+    else:
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

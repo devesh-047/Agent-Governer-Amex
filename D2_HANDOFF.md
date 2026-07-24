@@ -1,25 +1,31 @@
-# D2 → D1 Integration & Handoff Guide
+# D2 → Project Status & Roadmap
 
-**For:** Developer 1
-**Purpose:** Understand what D2 has implemented and how to integrate with it, without inspecting D2's codebase.
+**Purpose:** Current project status, completed integration, and remaining implementation roadmap.
+
+**Last Updated:** 2026-07-24
 
 ---
 
 ## 1. Quick Status
 
-**Integration Checkpoint (2026-07-23): D1 branch `agents-table-migration` merged. D2.1 and D2.2 are now INTEGRATED.**
+**Ownership Change (2026-07-24):** D1 work merged with D2. Single developer (D2) now owns all remaining implementation.
 
-| Feature | Status | D1 Action Needed |
-|---------|--------|------------------|
-| Identity verification | ✅ INTEGRATED | None - fully wired and tested |
-| Runtime status (check_runtime_status) | ✅ INTEGRATED | None - fully wired and tested |
-| Agent revoke/restore | NOT STARTED | - |
-| Fleet halt/resume | NOT STARTED | - |
-| Audit persistence | NOT STARTED | - |
-| Audit integrity verification | NOT STARTED | - |
-| Audit query APIs | NOT STARTED | - |
-| Frontend dashboard (Phase 1) | IMPLEMENTED / MOCK-BASED | Swap mocks to real API when D2 endpoints ready |
-| Demo agents (6-beat scenario) | NOT STARTED | - |
+**Integration Checkpoint (2026-07-23):** D1 branch merged. D2.1 (identity) and D2.2 (runtime state) are INTEGRATED.
+
+| Feature | Status | Next Action |
+|---------|--------|-------------|
+| Identity verification | ✅ INTEGRATED | None - complete |
+| Runtime status (check_runtime_status) | ✅ INTEGRATED | None - complete |
+| Agent revoke/restore | NOT STARTED | **NEXT MILESTONE** (Phase 2) |
+| Fleet halt/resume | NOT STARTED | After revoke/restore |
+| Audit persistence | NOT STARTED | Phase 1: audit log table |
+| Audit integrity verification | NOT STARTED | Phase 1: hash chain |
+| Audit query APIs | NOT STARTED | Phase 2: audit endpoints |
+| Frontend dashboard (Phase 1) | ✅ COMPLETE (MOCK-BASED) | Phase 4: swap to real API |
+| Demo agents (6-beat scenario) | NOT STARTED | Phase 5: after full system |
+| Policy engine (OPA + fallback) | NOT STARTED | Phase 1: core services |
+| Spend caps | NOT STARTED | Phase 1: core services |
+| /action-request orchestration | NOT STARTED | Phase 3: after services |
 
 **Status Legend:**
 - `NOT STARTED` - No implementation exists yet
@@ -64,6 +70,233 @@
 ```
 
 **Current state:** D2.1 (identity) and D2.2 (runtime status) are **INTEGRATED** with D1's database and Redis infrastructure. Tests pass with real Postgres and Redis.
+
+---
+
+## 2. Ownership Change (2026-07-24)
+
+**What Changed:**
+- D1's completed work has been merged with D2's codebase
+- Single developer (D2) now owns all remaining implementation
+- No more cross-developer coordination needed
+- Can implement in optimal single-developer sequence
+
+**D1 Work Completed:**
+- Infrastructure: docker-compose.yml, .env.example, main.py bootstrap
+- Agent model: db/models/agent.py with shared_secret field
+- Agents migration: alembic/versions/09ee32e4e00a_create_agents_table.py
+- AgentLookup: scripts/agent_lookup.py
+- RedisClient: services/redis_client.py
+
+**D2 Work Completed:**
+- Identity verification: services/identity.py ✅
+- Runtime safety: services/runtime_state.py ✅
+- Frontend Phase 1: frontend/src/** (mock-based) ✅
+
+**Test Results:** 89 tests passing
+
+---
+
+## 3. Remaining Implementation Roadmap (Vertical Milestones)
+
+### Milestone A: Audit Foundation
+
+| Task ID | Description | Files | Dependencies | Status |
+|---------|-------------|-------|--------------|--------|
+| 2.1 | Audit log table + migration | db/models/audit_log.py, migration | D1.2 ✅ | ✅ COMPLETE |
+| 2.2 | Hash-chain write function | services/hash_chain.py | Task 2.1 | TO DO |
+| 2.3 | Chain verification | services/hash_chain.py | Task 2.2 | TO DO |
+
+**Tests:** audit model, hash-chain construction, tamper detection
+
+### Milestone B: Runtime Control APIs
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 3.1 | Agent revoke/restore endpoints | routers/runtime.py | Task 2.2 |
+| 3.2 | Fleet halt/resume endpoints | routers/fleet.py | Task 2.2 |
+
+**Tests:** runtime control, fail-closed behavior
+
+**Note:** Uses audit foundation (Milestone A) so control actions can be logged
+
+### Milestone C: Policy + Spend
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 2.4 | Spend caps + atomic budget | services/spend.py | D1.2 ✅ |
+| 2.5 | OPA/Rego policy integration | policy/opa_client.py, .rego | D1.2 ✅ |
+| 2.6 | Python fallback for policy | policy/fallback.py | Task 2.5 |
+
+**Tests:** spend atomicity/fail-closed/concurrency, policy enforcement, OPA/fallback parity
+
+### Milestone D: Full /action-request Orchestration
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 4.1 | /action-request endpoint (full pipeline) | routers/action.py, schemas/action.py | Tasks 2.2, 2.4-2.6, D2.1✅, D2.2✅ |
+
+**Tests:** check order, pipeline integration
+
+**Pipeline:** Identity → Fleet halted → Agent revoked → Permission/max-amount → Spend cap → ALLOW/DENY → Audit recording
+
+### Milestone E: Remaining APIs
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 3.3 | Audit feed API | routers/audit.py | Task 2.1 |
+| 3.4 | Audit query API | routers/audit.py | Task 2.1 |
+| 3.5 | Verify chain API | routers/audit.py | Task 2.3 |
+| 3.6 | Policy config API | routers/policies.py | Tasks 2.4-2.6 |
+| 3.7 | Spend reset API | routers/policies.py | Task 2.4 |
+| — | Agent/status APIs (for frontend) | routers/policies.py | Tasks 2.4-2.6, D2.2✅ |
+
+**Tests:** API integration
+
+### Milestone F: Frontend Real-Backend Integration
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 5.1 | Real API client (swap mocks) | frontend/src/api/real.ts | All APIs (Milestone E) |
+| 5.2 | End-to-end frontend verification | manual testing | Task 5.1 |
+
+### Milestone G: Demo + E2E + Metrics
+
+| Task ID | Description | Files | Dependencies |
+|---------|-------------|-------|--------------|
+| 6.1 | Three demo agents + runner | demo/agents/*.py | Task 4.1 |
+| 6.2 | Complete test suite + regression | tests/ | All implementation |
+| 6.3 | Metrics collection | middleware/timing.py | Tasks 3.1-3.2, 4.1 |
+
+---
+
+## 4. Task 2.1 Completion Summary (2026-07-24)
+
+### Status: ✅ COMPLETE
+
+**Files created/modified:**
+- `db/models/audit_log.py` - AuditLog ORM model
+- `db/models/__init__.py` - Added AuditLog import
+- `alembic/versions/6a7a2b38c0bc_create_audit_log_table.py` - Migration
+- `alembic/env.py` - Updated to import AuditLog model
+- `tests/test_audit_model.py` - 8 focused tests
+- `tests/test_integration_identity.py` - Added test data seeding fixture
+- `tests/test_startup_wiring.py` - Added test data seeding fixture
+
+**Migration details:**
+- Revision: `6a7a2b38c0bc`
+- Down revision: `09ee32e4e00a`
+- Creates `audit_log` table with append-only protection
+- Creates ENUM types: `decision_enum`, `reason_code_enum`
+- Creates indexes: timestamp, agent_id, action_type, decision
+- Creates triggers: row-level (UPDATE/DELETE), statement-level (TRUNCATE)
+- FK constraint: `audit_log.agent_id → agents.id` (ON DELETE RESTRICT)
+
+**Final audit_log schema:**
+```sql
+CREATE TABLE audit_log (
+    id UUID PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE RESTRICT,
+    action_type VARCHAR(100) NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    decision decision_enum NOT NULL,  -- 'allow' | 'deny'
+    reason TEXT,
+    reason_code reason_code_enum NOT NULL,  -- See values below
+    policy_version VARCHAR(100) NOT NULL,
+    prev_hash VARCHAR(64) NOT NULL DEFAULT '',
+    hash VARCHAR(64) NOT NULL
+);
+```
+
+**ENUM values:**
+- `decision_enum`: 'allow', 'deny'
+- `reason_code_enum`: 'IDENTITY_FAILED', 'FLEET_HALTED', 'AGENT_REVOKED',
+  'PERMISSION_DENIED', 'AMOUNT_EXCEEDS_LIMIT', 'SPEND_CAP_EXCEEDED',
+  'RUNTIME_STATE_UNAVAILABLE', 'OK'
+
+**Append-only mechanism:**
+1. PostgreSQL function `block_audit_log_mutations()` raises exception on mutation
+2. Row-level trigger blocks UPDATE and DELETE operations
+3. Statement-level trigger blocks TRUNCATE operations
+4. Additional `REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC`
+   (limits direct SQL mutations, table owner can still bypass)
+
+**Note on superuser bypass:** The append-only protection can be bypassed by:
+- Database superuser (can disable triggers)
+- Direct table owner with sufficient privileges
+This is acceptable for the threat model (prevents accidental/app-level mutations,
+not determined malicious DBA with superuser access).
+
+**Test results:**
+- Focused tests: 8/8 PASSED
+- Full regression: 97/97 PASSED (added test data seeding fixtures to integration tests)
+- Migration cycle: upgrade/downgrade/upgrade verified
+- All schema constraints verified
+- Append-only triggers verified
+- Test order independence verified
+
+**What Task 2.1 unlocks:**
+- Task 2.2 (Hash-chain write function) can now persist audit records
+- Task 2.3 (Chain verification) can verify the hash chain
+- Runtime control APIs can log control actions
+- Orchestration can record all decisions
+
+---
+
+## 5. Next Milestone: Task 2.2 (Hash-chain write function)
+
+**Tasks to complete:** 2.2 → 2.3 (Task 2.1 ✅ COMPLETE)
+
+**What Task 2.2 delivers:**
+- `record_decision(event: DecisionEvent) -> AuditWriteResult` function
+- Hash generation with canonicalization
+- Audit write to database with prev_hash/hash chain linkage
+
+**What it unlocks:**
+- Task 2.3 (Chain verification) can verify the hash chain
+- Runtime control APIs can log control actions
+- Orchestration can record all decisions
+
+**Dependencies:**
+- Task 2.2 requires audit table (Task 2.1) ✅ COMPLETE
+- Task 2.3 requires hash chain write (Task 2.2)
+
+**Estimated complexity:** 2 sequential tasks, each independently testable
+
+---
+
+## 5. Gateway Check Order (Canonical)
+
+```
+1. Identity verification (verify_identity) ✅ COMPLETE
+2. Fleet halted check (check_runtime_status) ✅ COMPLETE
+3. Agent revoked check (check_runtime_status) ✅ COMPLETE
+4. Permission/max-amount policy evaluation (evaluate_policy)
+5. Spend-cap reservation (reserve_budget_atomic)
+6. ALLOW/DENY decision
+7. Audit recording (record_decision)
+```
+
+All denied requests short-circuit immediately. This order is authoritative for Milestone D implementation.
+
+---
+
+## 6. Alembic Migration Notes
+
+**Existing migration:** `09ee32e4e00a_create_agents_table.py` (revision: `09ee32e4e00a`)
+
+**New audit migration (Task 2.1) should:**
+- Use `alembic revision -m "create audit log table"`
+- Set `down_revision = "09ee32e4e00a"`
+- Create foreign key: `audit_log.agent_id → agents.id`
+- NOT be required to use filename "0002_audit_log.py"
+
+---
+
+## 7. Integration Points (Preserved)
+
+All D2-defined contracts remain frozen and functional:
 
 ---
 
