@@ -5,22 +5,24 @@ type StatusVariant = 'success' | 'warning' | 'error' | 'info' | 'neutral';
 interface StatusBadgeProps {
   variant: StatusVariant;
   children: ReactNode;
+  className?: string;
 }
 
 const variantStyles: Record<StatusVariant, string> = {
-  success: 'bg-semantic-success-bg text-semantic-success-text border-semantic-success-border',
-  warning: 'bg-semantic-warning-bg text-semantic-warning-text border-semantic-warning-border',
-  error: 'bg-semantic-error-bg text-semantic-error-text border-semantic-error-border',
-  info: 'bg-semantic-info-bg text-semantic-info-text border-semantic-info-border',
-  neutral: 'bg-background-tertiary text-text-tertiary border-border-medium',
+  success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  warning: 'bg-amber-50 text-amber-700 border-amber-200',
+  error: 'bg-rose-50 text-rose-700 border-rose-200',
+  info: 'bg-sky-50 text-sky-700 border-sky-200',
+  neutral: 'bg-slate-100 text-slate-600 border-slate-200',
 };
 
-export function StatusBadge({ variant, children }: StatusBadgeProps) {
+export function StatusBadge({ variant, children, className = '' }: StatusBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md border ${variantStyles[variant]}`}
+      className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-md border ${variantStyles[variant]} ${className}`}
     >
       {children}
     </span>
   );
 }
+

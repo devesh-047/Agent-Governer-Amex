@@ -73,6 +73,39 @@ class ProductionRedisClient:
         # runtime_state.py depends on exceptions propagating for fail-closed
         return self.client.get(key)
 
+    def set(self, key: str, value: str, nx: bool = False) -> Optional[bool]:
+        """Set a value in Redis.
+
+        Args:
+            key: The Redis key to set.
+            value: The string value to store.
+            nx: Only set if key does not already exist.
+
+        Returns:
+            True if set, False/None if nx=True and key already existed.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (propagated)
+        """
+        return self.client.set(key, value, nx=nx)
+
+    def decrby(self, key: str, amount: int) -> int:
+        """Atomically decrement a Redis integer key.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (propagated)
+        """
+        return self.client.decrby(key, amount)
+
+    def incrby(self, key: str, amount: int) -> int:
+        """Atomically increment a Redis integer key.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (propagated)
+        """
+        return self.client.incrby(key, amount)
+
+
 
 def create_redis_client_from_env() -> ProductionRedisClient:
     """

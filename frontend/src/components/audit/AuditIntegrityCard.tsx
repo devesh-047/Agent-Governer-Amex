@@ -1,3 +1,4 @@
+import { ShieldCheck, ShieldAlert, Shield, ArrowRight } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/Button';
 import { usePolling } from '@/hooks/usePolling';
@@ -10,12 +11,6 @@ const statusVariantMap: Record<IntegrityStatus['status'], 'success' | 'warning' 
   FAILED: 'error',
 };
 
-const statusLabelMap: Record<IntegrityStatus['status'], string> = {
-  VERIFIED: 'VERIFIED',
-  UNKNOWN: 'UNKNOWN',
-  FAILED: 'FAILED',
-};
-
 interface AuditIntegrityCardProps {
   onVerify: () => void;
 }
@@ -23,28 +18,21 @@ interface AuditIntegrityCardProps {
 export function AuditIntegrityCard({ onVerify }: AuditIntegrityCardProps) {
   const { data: integrityStatus, isLoading } = usePolling({
     pollFn: () => api.getIntegrityStatus(),
-    interval: 10000, // 10 seconds - less frequent than activity feed
+    interval: 10000,
   });
 
   if (!integrityStatus || isLoading) {
     return (
-      <div className="bg-background-surface border border-border-light rounded-lg p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-text-primary">Audit Integrity</h3>
+      <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-base font-bold text-slate-900">Audit Trail Integrity</h3>
         </div>
-        <div className="flex items-center justify-center py-6">
-          <div className="animate-pulse flex space-x-2">
-            <div className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce" />
-            <div className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce delay-100" />
-            <div className="w-2 h-2 bg-text-tertiary rounded-full animate-bounce delay-200" />
-          </div>
-        </div>
+        <div className="text-slate-400 text-sm animate-pulse">Verifying cryptographic chain...</div>
       </div>
     );
   }
 
   const variant = statusVariantMap[integrityStatus.status];
-  const statusLabel = statusLabelMap[integrityStatus.status];
 
   const formatLastVerified = (timestamp: string | null) => {
     if (!timestamp) return 'Never';
@@ -61,49 +49,59 @@ export function AuditIntegrityCard({ onVerify }: AuditIntegrityCardProps) {
     return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
   };
 
-  const statusIcon = integrityStatus.status === 'VERIFIED'
-    ? '●'
-    : integrityStatus.status === 'FAILED'
-    ? '×'
-    : '○';
+  const isVerified = integrityStatus.status === 'VERIFIED';
+  const isFailed = integrityStatus.status === 'FAILED';
 
   return (
-    <div className="bg-background-surface border border-border-light rounded-lg p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-text-primary">Audit Integrity</h3>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onVerify}
-          aria-label="Verify audit chain integrity now"
+    <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center gap-3.5">
+        <div
+          className={`p-3 rounded-xl ${
+            isVerified
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+              : isFailed
+              ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+              : 'bg-slate-100 text-slate-600 border border-slate-200'
+          }`}
         >
-          Verify Now
+          {isVerified ? (
+            <ShieldCheck className="w-6 h-6" />
+          ) : isFailed ? (
+            <ShieldAlert className="w-6 h-6" />
+          ) : (
+            <Shield className="w-6 h-6" />
+          )}
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Cryptographic Audit Chain
+            </h3>
+            <StatusBadge variant={variant}>
+              {integrityStatus.status}
+            </StatusBadge>
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5 font-medium">
+            {integrityStatus.total_records.toLocaleString()} audit records tracked
+            · Last checked: {formatLastVerified(integrityStatus.last_verified)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" size="sm" onClick={onVerify} className="w-full sm:w-auto">
+          <span>Run Integrity Audit</span>
+          <ArrowRight className="w-3.5 h-3.5 ml-1" />
         </Button>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <StatusBadge variant={variant}>
-            <span className="mr-1">{statusIcon}</span>
-            {statusLabel}
-          </StatusBadge>
-          <span className="text-xs text-text-tertiary">
-            {formatLastVerified(integrityStatus.last_verified)}
-          </span>
+      {isFailed && integrityStatus.break_at && (
+        <div className="w-full mt-3 bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs text-rose-700 font-medium">
+          Break detected at record #{integrityStatus.break_at}
         </div>
+      )}
 
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-text-tertiary">{integrityStatus.total_records.toLocaleString()} records</span>
-        </div>
-
-        {integrityStatus.status === 'FAILED' && integrityStatus.break_at && (
-          <div className="bg-semantic-error-bg border border-semantic-error-border rounded-md p-3">
-            <p className="text-semantic-error-text text-sm font-medium">
-              Break detected at record #{integrityStatus.break_at}
-            </p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
+

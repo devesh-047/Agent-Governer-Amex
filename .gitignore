@@ -2,20 +2,25 @@
 .venv/
 venv/
 env/
+.env/
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+coverage.xml
 *.egg-info/
 
-# Node.js / Frontend dependencies and build output
+# Frontend dependencies and build output
 node_modules/
 frontend/node_modules/
 dist/
 frontend/dist/
+build/
+frontend/build/
 coverage/
 .vite/
 
@@ -24,10 +29,8 @@ coverage/
 .env.*
 !.env.example
 
-# Claude Code IDE
-.claude
-
 # IDE and editor files
+.claude/
 .idea/
 .vscode/
 *.swp
@@ -47,7 +50,17 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Temp files
+# Docker runtime & data volumes
+postgres_data/
+redis_data/
+
+# Generated demo output and media
+screenshots/
+recordings/
+demo_output/
+*.mp4
+
+# Temp files and artifacts
 tmp/
 temp/
 *.tmp

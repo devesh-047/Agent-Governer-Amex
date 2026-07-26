@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Header } from '@/components/layout/Header';
+import { PageContainer } from '@/components/layout/PageContainer';
 import { FleetStatusCard } from '@/components/fleet/FleetStatusCard';
 import { AgentsSection } from '@/components/agents/AgentsSection';
 import { ActivityFeedCard } from '@/components/activity/ActivityFeedCard';
@@ -6,26 +8,13 @@ import { AuditIntegrityCard } from '@/components/audit/AuditIntegrityCard';
 import { IntegrityResultModal } from '@/components/audit/IntegrityResultModal';
 import { AgentDrawer } from '@/components/agents/AgentDrawer';
 import { FleetHaltModal } from '@/components/fleet/FleetHaltModal';
-import { ScenarioSelector } from '@/components/debug/ScenarioSelector';
 import { ToastContainer } from '@/components/ui/Toast';
 import { usePolling } from '@/hooks/usePolling';
 import { api } from '@/api';
 import type { IntegrityStatus } from '@/api/types';
 
 /**
- * Dashboard - Main dashboard page
- *
- * Layout:
- * - Wide screens (>= 1280px): Agents | Activity (side by side)
- * - Narrower screens: Stack vertically
- *
- * Composes all dashboard components:
- * - FleetStatusCard: Fleet-wide status and controls
- * - AgentsSection: List of all agents with status
- * - ActivityFeedCard: Live activity feed
- * - AgentDrawer: Slide-out drawer for agent details
- * - FleetHaltModal: Modal for halt/resume operations
- * - ToastContainer: Toast notifications
+ * Dashboard - Main AMEX Governance Dashboard
  */
 export function Dashboard() {
   const [drawerAgentId, setDrawerAgentId] = useState<string | null>(null);
@@ -35,7 +24,6 @@ export function Dashboard() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [agentsRefreshKey, setAgentsRefreshKey] = useState(0);
 
-  // Poll fleet state to determine if halt modal should show halt or resume
   const { data: fleetState, refetch: refetchFleetState } = usePolling({
     pollFn: () => api.getFleetState(),
     interval: 2000,
@@ -60,18 +48,11 @@ export function Dashboard() {
   };
 
   const handleHaltModalSuccess = () => {
-    // Immediately refetch fleet state and agents
     refetchFleetState();
     setAgentsRefreshKey((prev) => prev + 1);
   };
 
-  const handleAgentRevoked = () => {
-    // Trigger immediate refresh of agents
-    setAgentsRefreshKey((prev) => prev + 1);
-  };
-
-  const handleAgentRestored = () => {
-    // Trigger immediate refresh of agents
+  const handleAgentMutated = () => {
     setAgentsRefreshKey((prev) => prev + 1);
   };
 
@@ -100,49 +81,53 @@ export function Dashboard() {
     setIntegrityModalOpen(false);
   };
 
+  const handleRefreshAll = () => {
+    refetchFleetState();
+    setAgentsRefreshKey((prev) => prev + 1);
+  };
+
   return (
     <>
-      <div className="py-6 space-y-5">
-        {/* Fleet Status Card - Full width, most prominent */}
-        <FleetStatusCard onOpenHaltModal={handleOpenHaltModal} />
+      <Header
+        onOpenHaltModal={handleOpenHaltModal}
+        onRefreshAll={handleRefreshAll}
+      />
 
-        {/* Two-column layout for Agents and Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Agents Section */}
-          <div className="min-w-0">
-            <AgentsSection
-              key={agentsRefreshKey}
-              onOpenAgentDrawer={handleOpenAgentDrawer}
-            />
+      <PageContainer>
+        <div className="py-6 space-y-6">
+          {/* Overview Section: 4 KPI Summary Cards */}
+          <FleetStatusCard onOpenHaltModal={handleOpenHaltModal} />
+
+          {/* Two-Column Grid: Agent List & Live Activity Feed */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <div className="min-w-0">
+              <AgentsSection
+                key={agentsRefreshKey}
+                onOpenAgentDrawer={handleOpenAgentDrawer}
+              />
+            </div>
+
+            <div className="min-w-0 h-full">
+              <ActivityFeedCard />
+            </div>
           </div>
 
-          {/* Activity Feed */}
-          <div className="min-w-0">
-            <ActivityFeedCard />
-          </div>
+          {/* Audit Integrity Footer Banner */}
+          <AuditIntegrityCard onVerify={handleVerifyIntegrity} />
         </div>
+      </PageContainer>
 
-        {/* Audit Integrity Card - Full width, secondary */}
-        <AuditIntegrityCard onVerify={handleVerifyIntegrity} />
-
-        {/* Mobile warning - shows on small screens */}
-        <div className="md:hidden bg-background-tertiary border border-border-light rounded-lg p-3 text-center">
-          <p className="text-text-secondary text-sm">
-            For the best experience, use a larger screen (768px or wider).
-          </p>
-        </div>
-      </div>
-
-      {/* Agent Detail Drawer */}
+      {/* Agent Details Drawer */}
       <AgentDrawer
         isOpen={drawerAgentId !== null}
         agentId={drawerAgentId}
         onClose={handleCloseDrawer}
-        onAgentRevoked={handleAgentRevoked}
-        onAgentRestored={handleAgentRestored}
+        onAgentRevoked={handleAgentMutated}
+        onAgentRestored={handleAgentMutated}
+        onAgentMutated={handleAgentMutated}
       />
 
-      {/* Fleet Halt/Resume Modal */}
+      {/* Fleet Halt / Resume Modal */}
       <FleetHaltModal
         isOpen={haltModalOpen}
         isHalted={isHalted}
@@ -150,7 +135,7 @@ export function Dashboard() {
         onSuccess={handleHaltModalSuccess}
       />
 
-      {/* Integrity Result Modal */}
+      {/* Cryptographic Chain Integrity Modal */}
       <IntegrityResultModal
         isOpen={integrityModalOpen}
         onClose={handleCloseIntegrityModal}
@@ -158,11 +143,9 @@ export function Dashboard() {
         isLoading={isVerifying}
       />
 
-      {/* Scenario Selector (dev only) */}
-      <ScenarioSelector />
-
-      {/* Toast Container */}
+      {/* Toast Notification Layer */}
       <ToastContainer />
     </>
   );
 }
+

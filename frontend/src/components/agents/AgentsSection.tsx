@@ -1,9 +1,10 @@
+import { useState } from 'react';
+import { ChevronDown, ChevronUp, Copy, Check, Eye, ShieldAlert, ShieldCheck, Cpu } from 'lucide-react';
 import { api } from '@/api';
 import { usePolling } from '@/hooks/usePolling';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import type { AgentStatus } from '@/api/types';
 
 interface AgentDisplayInfo {
   id: string;
@@ -12,10 +13,12 @@ interface AgentDisplayInfo {
   dailyCap: number;
   spent: number;
   remaining: number;
+  behaviour: 'Compliant' | 'Policy Violator' | 'Runaway' | 'System';
   lastDecision: {
     decision: 'allow' | 'deny';
     action: string;
     amount: number;
+    reason?: string | null;
     timeAgo: string;
   } | null;
 }
@@ -25,14 +28,7 @@ interface AgentsSectionProps {
 }
 
 /**
- * AgentsSection - Displays list of all agents with their status
- *
- * Shows for each agent:
- * - Human-readable name
- * - Status indicator (Active/Revoked/Halted)
- * - Daily cap and spent amount with progress bar
- * - Last decision summary
- * - View Details button (opens drawer)
+ * AgentsSection - Displays list of all agents with their status, metrics, and actions
  */
 export function AgentsSection({ onOpenAgentDrawer }: AgentsSectionProps) {
   const { data: agents, isLoading, error } = usePolling({
@@ -40,36 +36,6 @@ export function AgentsSection({ onOpenAgentDrawer }: AgentsSectionProps) {
     interval: 2000,
   });
 
-  // Transform agents to display format
-  const agentList: AgentDisplayInfo[] =
-    agents?.map((agent) => {
-      const spent = agent.daily_cap - agent.remaining_budget;
-      const remaining = agent.remaining_budget;
-
-      // Determine effective status - show compound status when both revoked and halted
-      let status: 'active' | 'revoked' | 'halted' | 'revoked-halted';
-      if (agent.fleet_halted && agent.status === 'revoked') {
-        status = 'revoked-halted'; // Both conditions - agent is revoked AND fleet is halted
-      } else if (agent.fleet_halted) {
-        status = 'halted';
-      } else if (agent.status === 'revoked') {
-        status = 'revoked';
-      } else {
-        status = 'active';
-      }
-
-      return {
-        id: agent.id,
-        name: agent.name,
-        status,
-        dailyCap: agent.daily_cap,
-        spent,
-        remaining,
-        lastDecision: null, // Will be populated from activity feed
-      };
-    }) ?? [];
-
-  // Get activity feed to populate last decisions
   const { data: activityFeed } = usePolling({
     pollFn: () => api.getActivityFeed(50),
     interval: 2000,
@@ -83,16 +49,54 @@ export function AgentsSection({ onOpenAgentDrawer }: AgentsSectionProps) {
         decision: event.decision,
         action: event.action_type,
         amount: event.amount,
+        reason: event.reason,
         timeAgo: formatTimeAgo(event.timestamp),
       });
     }
   });
 
-  // Update last decisions in agent list - create new array instead of mutating
-  const agentListWithDecisions = agentList.map((agent) => ({
-    ...agent,
-    lastDecision: lastDecisionMap.get(agent.id) ?? null,
-  }));
+  // Transform agents to display format
+  const agentList: AgentDisplayInfo[] =
+    agents?.map((agent) => {
+      const spent = Math.max(0, agent.daily_cap - (agent.remaining_budget ?? agent.daily_cap));
+      const remaining = agent.remaining_budget ?? 0;
+
+      const isRevoked = agent.status === 'revoked' || agent.runtime_status === 'revoked';
+      const isHalted = agent.fleet_halted === true;
+      let status: 'active' | 'revoked' | 'halted' | 'revoked-halted';
+      if (isRevoked && isHalted) {
+        status = 'revoked-halted';
+      } else if (isHalted) {
+        status = 'halted';
+      } else if (isRevoked) {
+        status = 'revoked';
+      } else {
+        status = 'active';
+      }
+
+      const lastDec = lastDecisionMap.get(agent.id) ?? null;
+
+      // Determine Behaviour Badge
+      let behaviour: 'Compliant' | 'Policy Violator' | 'Runaway' | 'System' = 'Compliant';
+      if (agent.name.toLowerCase().includes('system') || agent.id.toLowerCase().includes('system')) {
+        behaviour = 'System';
+      } else if (isRevoked || lastDec?.decision === 'deny') {
+        behaviour = 'Policy Violator';
+      } else if ((spent / agent.daily_cap) >= 0.8) {
+        behaviour = 'Runaway';
+      }
+
+      return {
+        id: agent.id,
+        name: agent.name,
+        status,
+        dailyCap: agent.daily_cap,
+        spent,
+        remaining,
+        behaviour,
+        lastDecision: lastDec,
+      };
+    }) ?? [];
 
   const handleViewDetails = (agentId: string) => {
     onOpenAgentDrawer(agentId);
@@ -100,36 +104,41 @@ export function AgentsSection({ onOpenAgentDrawer }: AgentsSectionProps) {
 
   if (isLoading && !agents) {
     return (
-      <div className="bg-background-surface border border-border-light rounded-lg shadow-sm p-5">
-        <h2 className="text-base font-semibold text-text-primary mb-4">Agents</h2>
-        <div className="text-text-tertiary text-sm">Loading agents...</div>
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm p-6">
+        <h2 className="text-base font-bold text-slate-900 mb-4">Agents Fleet</h2>
+        <div className="text-slate-400 text-sm animate-pulse">Loading agent fleet...</div>
       </div>
     );
   }
 
   if (error && !agents) {
     return (
-      <div className="bg-background-surface border border-border-light rounded-lg shadow-sm p-5">
-        <h2 className="text-base font-semibold text-text-primary mb-4">Agents</h2>
-        <div className="text-semantic-error-text text-sm">
-          Error loading agents: {error.message}
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm p-6">
+        <h2 className="text-base font-bold text-slate-900 mb-4">Agents Fleet</h2>
+        <div className="text-rose-600 text-sm font-medium">
+          Failed to load agents: {error.message}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-background-surface border border-border-light rounded-lg shadow-sm p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-text-primary">Agents</h2>
-        <span className="text-xs text-text-tertiary">{agentListWithDecisions.length} total</span>
+    <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm p-5">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+        <div>
+          <h2 className="text-base font-bold text-slate-900 tracking-tight">Agents Fleet</h2>
+          <p className="text-xs text-slate-500 font-normal">Active financial agent instances</p>
+        </div>
+        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+          {agentList.length} Total
+        </span>
       </div>
 
-      {agentListWithDecisions.length === 0 ? (
-        <div className="text-text-tertiary text-sm">No agents configured</div>
+      {agentList.length === 0 ? (
+        <div className="text-slate-400 text-sm text-center py-6">No active agents found</div>
       ) : (
-        <div className="space-y-3">
-          {agentListWithDecisions.map((agent) => (
+        <div className="space-y-4">
+          {agentList.map((agent) => (
             <AgentCard key={agent.id} agent={agent} onViewDetails={handleViewDetails} />
           ))}
         </div>
@@ -144,102 +153,165 @@ interface AgentCardProps {
 }
 
 function AgentCard({ agent, onViewDetails }: AgentCardProps) {
-  const percentUsed = (agent.spent / agent.dailyCap) * 100;
-  // Semantic thresholds: Normal < 50%, Warning 50-80%, Critical > 80%
+  const [showFullUuid, setShowFullUuid] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const percentUsed = Math.min(100, Math.max(0, (agent.spent / agent.dailyCap) * 100));
   const riskLevel: 'normal' | 'warning' | 'critical' =
     percentUsed >= 80 ? 'critical' : percentUsed >= 50 ? 'warning' : 'normal';
   const progressColor: 'primary' | 'success' | 'warning' | 'error' =
     riskLevel === 'critical' ? 'error' : riskLevel === 'warning' ? 'warning' : 'primary';
 
-  const riskLabel = riskLevel === 'critical' ? 'Critical' : riskLevel === 'warning' ? 'Warning' : '';
-  const riskColor = riskLevel === 'critical' ? 'text-semantic-error-text' :
-                    riskLevel === 'warning' ? 'text-semantic-warning-text' : '';
+  const copyUuid = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(agent.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const getBehaviourStyle = (b: AgentDisplayInfo['behaviour']) => {
+    switch (b) {
+      case 'Compliant':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Policy Violator':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'Runaway':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'System':
+        return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  const getStatusBadgeVariant = (s: AgentDisplayInfo['status']) => {
+    switch (s) {
+      case 'active':
+        return { variant: 'success' as const, label: 'ACTIVE' };
+      case 'revoked':
+        return { variant: 'warning' as const, label: 'REVOKED' };
+      case 'halted':
+        return { variant: 'error' as const, label: 'HALTED' };
+      case 'revoked-halted':
+        return { variant: 'error' as const, label: 'REVOKED · HALTED' };
+    }
+  };
+
+  const statusInfo = getStatusBadgeVariant(agent.status);
+  const shortenedId = agent.id.length > 12 ? `${agent.id.slice(0, 10)}...` : agent.id;
 
   return (
-    <div className="bg-background-secondary rounded-lg p-4 border border-border-light hover:border-border-medium transition-colors">
-      {/* Header row: Name + Status + View link */}
-      <div className="flex items-start justify-between mb-3">
+    <div className="bg-slate-50/70 hover:bg-slate-50 border border-slate-200 rounded-xl p-4 transition-all duration-200 shadow-2xs hover:shadow-sm">
+      {/* Top Row: Name, Badges & View button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <StatusIndicator status={agent.status} />
-            <h3 className="text-base font-semibold text-text-primary truncate">{agent.name}</h3>
-            {riskLabel && (
-              <span className={`text-xs font-medium ${riskColor}`}>{riskLabel}</span>
+          <div className="flex items-center flex-wrap gap-2 mb-1">
+            <h3 className="text-base font-bold text-slate-900 truncate tracking-tight">
+              {agent.name}
+            </h3>
+            {/* Behaviour Badge */}
+            <span
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${getBehaviourStyle(
+                agent.behaviour
+              )}`}
+            >
+              {agent.behaviour}
+            </span>
+            {/* Status Badge */}
+            <StatusBadge variant={statusInfo.variant}>
+              {statusInfo.label}
+            </StatusBadge>
+          </div>
+
+          {/* Collapsible UUID (Hidden by default) */}
+          <div className="flex items-center gap-2 mt-1 text-xs text-slate-400 font-mono">
+            <span>ID:</span>
+            {!showFullUuid ? (
+              <span className="bg-slate-200/60 px-1.5 py-0.5 rounded text-slate-600 font-medium">
+                {shortenedId}
+              </span>
+            ) : (
+              <span className="bg-slate-900 text-emerald-400 px-2 py-0.5 rounded select-all break-all">
+                {agent.id}
+              </span>
+            )}
+            <button
+              onClick={() => setShowFullUuid(!showFullUuid)}
+              className="text-[11px] text-slate-500 hover:text-slate-800 font-sans flex items-center gap-0.5 underline cursor-pointer"
+            >
+              {showFullUuid ? (
+                <>Hide ID <ChevronUp className="w-3 h-3" /></>
+              ) : (
+                <>Expand ID <ChevronDown className="w-3 h-3" /></>
+              )}
+            </button>
+            {showFullUuid && (
+              <button
+                onClick={copyUuid}
+                className="text-slate-400 hover:text-slate-700 p-0.5 transition-colors"
+                title="Copy full UUID"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
             )}
           </div>
-          <div className="text-xs text-text-tertiary font-mono">{agent.id}</div>
         </div>
-        <button
-          className="text-text-secondary hover:text-text-primary text-sm flex items-center gap-1 transition-colors ml-3"
+
+        {/* View Details Action Button */}
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => onViewDetails(agent.id)}
+          className="self-start sm:self-center shrink-0"
         >
-          <span className="underline">View</span>
-          <span>→</span>
-        </button>
+          <span>View Details</span>
+          <Eye className="w-3.5 h-3.5 ml-0.5" />
+        </Button>
       </div>
 
-      {/* Spend progress */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between text-sm mb-1">
-          <span className="text-text-primary">
-            <span className="font-medium">${agent.spent.toLocaleString()}</span>
-            <span className="text-text-secondary"> spent</span>
+      {/* Spend Progress Section */}
+      <div className="bg-white border border-slate-200/80 rounded-lg p-3 mb-3">
+        <div className="flex items-center justify-between text-xs font-medium mb-1.5">
+          <span className="text-slate-700">
+            Spent: <span className="font-bold text-slate-900">${agent.spent.toLocaleString()}</span>
           </span>
-          <span className="text-text-secondary">
-            ${agent.remaining.toLocaleString()} remaining
+          <span className="text-slate-500">
+            Remaining: <span className="font-bold text-emerald-700">${agent.remaining.toLocaleString()}</span>
           </span>
         </div>
         <ProgressBar value={agent.spent} max={agent.dailyCap} color={progressColor} />
-        <div className="text-xs text-text-tertiary mt-1">Daily limit ${agent.dailyCap.toLocaleString()}</div>
+        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5 font-medium">
+          <span>Daily Limit: ${agent.dailyCap.toLocaleString()}</span>
+          <span>{percentUsed.toFixed(1)}% utilized</span>
+        </div>
       </div>
 
-      {/* Last decision */}
-      <div className="pt-2 border-t border-border-light">
-        <div className="text-xs text-text-tertiary mb-1">Last decision</div>
+      {/* Last Decision Footer */}
+      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-200/60">
+        <span className="text-slate-400 font-medium">Last Decision:</span>
         {agent.lastDecision ? (
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2">
             <span
-              className={`font-semibold ${
+              className={`font-bold px-1.5 py-0.5 rounded text-[11px] ${
                 agent.lastDecision.decision === 'allow'
-                  ? 'text-semantic-success-text'
-                  : 'text-semantic-error-text'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-rose-50 text-rose-700 border border-rose-200'
               }`}
             >
               {agent.lastDecision.decision.toUpperCase()}
             </span>
-            <span className="text-text-primary">
+            <span className="text-slate-700 font-medium truncate max-w-[180px]">
               {agent.lastDecision.action}
-              {agent.lastDecision.amount > 0 && (
-                <span> · ${agent.lastDecision.amount}</span>
-              )}
+              {agent.lastDecision.amount > 0 && ` ($${agent.lastDecision.amount})`}
             </span>
-            <span className="text-text-tertiary text-xs ml-auto">
+            <span className="text-slate-400 text-[11px] font-mono">
               {agent.lastDecision.timeAgo}
             </span>
           </div>
         ) : (
-          <div className="text-sm text-text-tertiary">No activity yet</div>
+          <span className="text-slate-400 font-normal italic">No recent decisions</span>
         )}
       </div>
     </div>
   );
-}
-
-interface StatusIndicatorProps {
-  status: 'active' | 'revoked' | 'halted' | 'revoked-halted';
-}
-
-function StatusIndicator({ status }: StatusIndicatorProps) {
-  const config = {
-    active: { symbol: '●', color: 'text-semantic-success-text', label: 'Agent is active and operational' },
-    revoked: { symbol: '!', color: 'text-semantic-warning-text', label: 'Agent is revoked' },
-    halted: { symbol: '×', color: 'text-semantic-error-text', label: 'Fleet is halted' },
-    'revoked-halted': { symbol: '!×', color: 'text-semantic-error-text', label: 'Agent is revoked and fleet is halted' },
-  };
-
-  const { symbol, color, label } = config[status];
-
-  return <span className={`text-lg font-bold ${color}`} aria-label={label} role="status">{symbol}</span>;
 }
 
 /**
@@ -262,3 +334,4 @@ function formatTimeAgo(timestamp: string): string {
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
 }
+

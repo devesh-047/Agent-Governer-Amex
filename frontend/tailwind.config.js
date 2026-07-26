@@ -3,9 +3,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        amex: {
+          burgundy: '#4A0E17',
+          burgundyDark: '#360910',
+          burgundyLight: '#631522',
+          burgundyHover: '#57101C',
+          gold: '#D4AF37',
+          goldLight: '#F3E5AB'
+        },
         background: {
-          primary: '#ffffff',
-          secondary: '#f8fafc',
+          primary: '#f8fafc',
+          secondary: '#ffffff',
           tertiary: '#f1f5f9',
           surface: '#ffffff'
         },
@@ -16,15 +24,15 @@ export default {
           inverse: '#ffffff'
         },
         semantic: {
-          success: { bg: '#dcfce7', text: '#166534', border: '#86efac' },
-          warning: { bg: '#fef9c3', text: '#854d0e', border: '#fde047' },
-          error: { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5' },
-          info: { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd' }
+          success: { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' },
+          warning: { bg: '#fffbeb', text: '#b45309', border: '#fde68a' },
+          error: { bg: '#fef2f2', text: '#b91c1c', border: '#fca5a5' },
+          info: { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' }
         },
         brand: {
-          primary: '#1e40af',
-          secondary: '#3b82f6',
-          accent: '#0ea5e9'
+          primary: '#4A0E17',
+          secondary: '#631522',
+          accent: '#0284c7'
         },
         border: {
           light: '#e2e8f0',
@@ -36,23 +44,11 @@ export default {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['JetBrains Mono', 'SF Mono', 'Consolas', 'monospace']
       },
-      spacing: {
-        '1': '0.25rem', '2': '0.5rem', '3': '0.75rem', '4': '1rem',
-        '6': '1.5rem', '8': '2rem', '12': '3rem'
-      },
-      borderRadius: {
-        'sm': '0.25rem', 'md': '0.375rem', 'lg': '0.5rem', 'xl': '0.75rem', 'full': '9999px'
-      },
       boxShadow: {
-        'sm': '0 1px 2px rgba(0, 0, 0, 0.05)',
-        'md': '0 4px 6px rgba(0, 0, 0, 0.1)',
-        'lg': '0 10px 15px rgba(0, 0, 0, 0.1)',
-        'xl': '0 20px 25px rgba(0, 0, 0, 0.15)'
-      },
-      transitionDuration: {
-        'fast': '150ms',
-        'normal': '250ms',
-        'slow': '350ms'
+        'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04)',
+        'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03)',
+        'card': '0 2px 8px rgba(15, 23, 42, 0.06)'
       }
     }
   },

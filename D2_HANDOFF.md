@@ -16,16 +16,17 @@
 |---------|--------|-------------|
 | Identity verification | ✅ INTEGRATED | None - complete |
 | Runtime status (check_runtime_status) | ✅ INTEGRATED | None - complete |
-| Agent revoke/restore | NOT STARTED | **NEXT MILESTONE** (Phase 2) |
-| Fleet halt/resume | NOT STARTED | After revoke/restore |
-| Audit persistence | NOT STARTED | Phase 1: audit log table |
-| Audit integrity verification | NOT STARTED | Phase 1: hash chain |
-| Audit query APIs | NOT STARTED | Phase 2: audit endpoints |
+| Audit log table + migration (Task 2.1) | ✅ COMPLETE | None - complete |
+| Hash-chain write (Task 2.2) | ✅ COMPLETE | None - complete |
+| Chain verification (Task 2.3) | ✅ COMPLETE | None - complete |
+| Agent revoke/restore (Task 3.1) | ✅ COMPLETE | None - complete |
+| Fleet halt/resume (Task 3.2) | ✅ COMPLETE | None - complete |
+| Audit query APIs | NOT STARTED | **NEXT MILESTONE** (Milestone C: Policy+Spend or Milestone E: Audit APIs) |
 | Frontend dashboard (Phase 1) | ✅ COMPLETE (MOCK-BASED) | Phase 4: swap to real API |
 | Demo agents (6-beat scenario) | NOT STARTED | Phase 5: after full system |
-| Policy engine (OPA + fallback) | NOT STARTED | Phase 1: core services |
-| Spend caps | NOT STARTED | Phase 1: core services |
-| /action-request orchestration | NOT STARTED | Phase 3: after services |
+| Policy engine (OPA + fallback) | NOT STARTED | Milestone C |
+| Spend caps | NOT STARTED | Milestone C |
+| /action-request orchestration | NOT STARTED | Milestone D: after services |
 
 **Status Legend:**
 - `NOT STARTED` - No implementation exists yet
@@ -104,19 +105,19 @@
 | Task ID | Description | Files | Dependencies | Status |
 |---------|-------------|-------|--------------|--------|
 | 2.1 | Audit log table + migration | db/models/audit_log.py, migration | D1.2 ✅ | ✅ COMPLETE |
-| 2.2 | Hash-chain write function | services/hash_chain.py | Task 2.1 | TO DO |
-| 2.3 | Chain verification | services/hash_chain.py | Task 2.2 | TO DO |
+| 2.2 | Hash-chain write function | services/hash_chain.py | Task 2.1 | ✅ COMPLETE |
+| 2.3 | Chain verification | services/hash_chain.py | Task 2.2 | ✅ COMPLETE |
 
-**Tests:** audit model, hash-chain construction, tamper detection
+**Tests:** audit model, hash-chain construction, tamper detection — 30 tests passing
 
 ### Milestone B: Runtime Control APIs
 
-| Task ID | Description | Files | Dependencies |
-|---------|-------------|-------|--------------|
-| 3.1 | Agent revoke/restore endpoints | routers/runtime.py | Task 2.2 |
-| 3.2 | Fleet halt/resume endpoints | routers/fleet.py | Task 2.2 |
+| Task ID | Description | Files | Dependencies | Status |
+|---------|-------------|-------|--------------|--------|
+| 3.1 | Agent revoke/restore endpoints | routers/runtime.py | Task 2.2 | ✅ COMPLETE |
+| 3.2 | Fleet halt/resume endpoints | routers/fleet.py | Task 2.2 | ✅ COMPLETE |
 
-**Tests:** runtime control, fail-closed behavior
+**Tests:** runtime control, fail-closed behavior — 23 tests passing
 
 **Note:** Uses audit foundation (Milestone A) so control actions can be logged
 

@@ -5,12 +5,18 @@
  * Phase 2+: Swap to real fetch-based client when D1/D2 endpoints are ready
  */
 
-import { mockApi } from './mocks';
 import type { GovernanceApi } from './client';
+import { fetchApi } from './fetchClient';
+// Keep mock import commented out or available for quick rollback if needed
+// import { mockApi } from './mocks';
 
-// Phase 1-2: Use mocks
-// TODO: Swap to real client when backend is ready
-export const api: GovernanceApi = mockApi;
+/**
+ * Singleton API client instance used by all components.
+ *
+ * During Phase 1-2, this was mockApi.
+ * Switched to real fetchApi for Phase 3+.
+ */
+export const api: GovernanceApi = fetchApi;
 
 // Re-export types for convenience
 export * from './types';

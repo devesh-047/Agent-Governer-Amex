@@ -27,17 +27,17 @@ export interface AuditLogEntry {
   hash: string;
 }
 
-// AgentStatus (D1.7 - D1 owns this schema)
-// Includes both D1 fields (policy, spend) and D2 fields (runtime status)
-export interface AgentStatus {
+export interface Agent {
   id: string;
   name: string;
+  description: string; // The backend doesn't have a description field, but UI might need it. We will map name or leave it empty in client.
   permissions: string[];
   max_single_amount: number;
   daily_cap: number;
-  remaining_budget: number;
+  remaining_budget: number | null;
   status: 'active' | 'revoked';
-  fleet_halted: boolean; // from RuntimeStatus
+  runtime_status: 'active' | 'revoked' | null;
+  fleet_halted: boolean | null;
 }
 
 // FleetState (D2 - fleet-wide state)
@@ -49,28 +49,9 @@ export interface FleetState {
 // UI-SPECIFIC TYPES (not frozen contracts)
 // ============================================================================
 
-export type Scenario = 'NORMAL' | 'RISK' | 'INCIDENT';
+// Removed Scenario
 
-export interface AgentLastDecision {
-  timestamp: string;
-  decision: 'allow' | 'deny';
-  action_type: string;
-  amount: number;
-  reason: string;
-}
-
-export interface MockAgent {
-  id: string;
-  name: string;
-  description: string;
-  status: 'ACTIVE' | 'REVOKED'; // Intrinsic agent state only
-  fleet_halted: boolean; // Global fleet state (for deriving display state)
-  daily_cap: number;
-  remaining_budget: number;
-  max_single_amount: number;
-  permissions: string[];
-  last_decision: AgentLastDecision | null;
-}
+// Removed MockAgent and AgentLastDecision
 
 export interface ActivityEvent {
   id: string;
@@ -91,3 +72,14 @@ export interface IntegrityStatus {
   expected_hash: string | null;
   actual_hash: string | null;
 }
+
+export interface ActionExecutionResponse {
+  decision: 'allow' | 'deny';
+  reason_code: string;
+  reason: string | null;
+  remaining_budget: number;
+  audit_log_id?: string;
+  hash?: string;
+  execution_time_ms?: number;
+}
+

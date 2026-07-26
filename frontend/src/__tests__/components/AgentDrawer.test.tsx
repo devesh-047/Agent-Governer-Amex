@@ -11,6 +11,7 @@ vi.mock('@/api', () => ({
     getActivityFeed: vi.fn(),
     revokeAgent: vi.fn(),
     restoreAgent: vi.fn(),
+    executeAction: vi.fn(),
   },
 }));
 
@@ -40,6 +41,15 @@ describe('AgentDrawer', () => {
     vi.clearAllMocks();
     apiModule.api.getAgent.mockResolvedValue(mockAgent);
     apiModule.api.getActivityFeed.mockResolvedValue([]);
+    apiModule.api.executeAction.mockResolvedValue({
+      decision: 'allow',
+      reason_code: 'OK',
+      reason: null,
+      remaining_budget: 615,
+      audit_log_id: 'test-audit-id',
+      hash: 'test-hash',
+      execution_time_ms: 25,
+    });
   });
 
   describe('Revoke changes only target agent', () => {
@@ -115,4 +125,79 @@ describe('AgentDrawer', () => {
       });
     });
   });
+
+  describe('Test Agent Action section', () => {
+    it('pre-populates defaults and executes action successfully', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <AgentDrawer
+          isOpen={true}
+          agentId="agent_a_01"
+          onClose={() => {}}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('TEST AGENT ACTION')).toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: /Action Type/i })).toHaveValue('refund');
+      });
+
+      const executeButton = screen.getByRole('button', { name: /EXECUTE ACTION/i });
+      expect(executeButton).toBeEnabled();
+
+      await user.click(executeButton);
+
+      await waitFor(() => {
+        expect(apiModule.api.executeAction).toHaveBeenCalled();
+        expect(screen.getByText(/ALLOW/i)).toBeInTheDocument();
+      });
+    });
+
+
+
+    it('disables controls when agent is revoked', async () => {
+      apiModule.api.getAgent.mockResolvedValue({
+        ...mockAgent,
+        status: 'REVOKED',
+      });
+
+      render(
+        <AgentDrawer
+          isOpen={true}
+          agentId="agent_a_01"
+          onClose={() => {}}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('TEST AGENT ACTION')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText(/Agent is currently revoked/i)).toBeInTheDocument();
+      const executeButton = screen.getByRole('button', { name: /EXECUTE ACTION/i });
+      expect(executeButton).toBeDisabled();
+    });
+
+    it('shows message for system agents', async () => {
+      apiModule.api.getAgent.mockResolvedValue({
+        ...mockAgent,
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'System Agent',
+      });
+
+      render(
+        <AgentDrawer
+          isOpen={true}
+          agentId="00000000-0000-0000-0000-000000000001"
+          onClose={() => {}}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('System agents cannot initiate financial actions.')).toBeInTheDocument();
+      });
+    });
+  });
 });
+

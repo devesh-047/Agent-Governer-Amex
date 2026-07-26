@@ -1,10 +1,9 @@
 import type {
-  AgentStatus,
+  Agent,
   FleetState,
   ActivityEvent,
   IntegrityStatus,
-  MockAgent,
-  Scenario,
+  ActionExecutionResponse,
 } from './types';
 
 /**
@@ -28,12 +27,19 @@ export interface GovernanceApi {
   resumeFleet(): Promise<void>;
 
   // Agents (D1 + D2 composed)
-  getAgents(): Promise<AgentStatus[]>;
-  getAgent(agentId: string): Promise<MockAgent>;
+  getAgents(): Promise<Agent[]>;
+  getAgent(agentId: string): Promise<Agent>;
+
+  // Policy & Spend (D1)
+  updatePolicy(agentId: string, permissions: string[], max_single_amount: number, daily_cap: number): Promise<Agent>;
+  resetSpend(agentId: string): Promise<void>;
 
   // Agent Runtime Safety (D2)
   revokeAgent(agentId: string): Promise<void>;
   restoreAgent(agentId: string): Promise<void>;
+
+  // Action Request Execution (Gateway)
+  executeAction(agentId: string, actionType: string, amount: number, agentName?: string): Promise<ActionExecutionResponse>;
 
   // Activity Feed (D2)
   getActivityFeed(limit?: number): Promise<ActivityEvent[]>;
@@ -42,7 +48,5 @@ export interface GovernanceApi {
   getIntegrityStatus(): Promise<IntegrityStatus>;
   verifyChain(): Promise<IntegrityStatus>;
 
-  // Scenario control (mock-only, for demo)
-  setScenario(scenario: Scenario): Promise<void>;
-  getCurrentScenario(): Promise<Scenario>;
 }
+

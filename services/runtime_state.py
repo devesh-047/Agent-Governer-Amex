@@ -73,15 +73,14 @@ class RuntimeStatus:
 
 class RedisClient(Protocol):
     """
-    Protocol for Redis GET operations.
+    Protocol for Redis GET and SET operations.
 
     This represents the Redis dependency. D1 will implement this interface
     to provide Redis access. Tests inject fake implementations.
 
-    The protocol defines only what D2 needs: GET operations for runtime state.
-    D2 does NOT write to Redis - that's D2.3/D2.4's responsibility.
+    The protocol defines what D2 needs: GET for reads, SET for writes.
     """
-
+    # Protocol for read operations (D2.2)
     def get(self, key: str) -> Optional[Union[str, bytes]]:
         """
         Retrieve a value from Redis by key.
@@ -99,6 +98,40 @@ class RedisClient(Protocol):
             - str: decoded string (some client libraries)
             Implementations should return whatever the underlying Redis
             client returns without transformation.
+        """
+        ...
+
+    # Protocol for write operations (D2.3/D2.4 + spend enforcement)
+    def set(self, key: str, value: str, nx: bool = False) -> Optional[bool]:
+        """Set a value in Redis.
+
+        Args:
+            key: The Redis key to set.
+            value: The string value to store.
+            nx: If True, only set when the key does not already exist
+                (atomic initialisation for spend counters).
+
+        Returns:
+            True if the key was set, False/None if nx=True and key existed.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (should propagate).
+        """
+        ...
+
+    def decrby(self, key: str, amount: int) -> int:
+        """Atomically decrement an integer key by *amount*.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (should propagate).
+        """
+        ...
+
+    def incrby(self, key: str, amount: int) -> int:
+        """Atomically increment an integer key by *amount*.
+
+        Raises:
+            RedisError: Connection failures, timeouts, etc. (should propagate).
         """
         ...
 
@@ -167,6 +200,19 @@ def reset_redis_client() -> None:
     """
     global _redis_client
     _redis_client = None
+
+
+def get_redis_client() -> Optional[RedisClient]:
+    """
+    Get the configured Redis client implementation.
+
+    Returns:
+        The configured RedisClient or None if not set
+
+    This allows Runtime Control APIs (D2.3/D2.4) to access the
+    Redis client for write operations.
+    """
+    return _redis_client
 
 
 def _parse_redis_value(

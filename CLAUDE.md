@@ -241,28 +241,28 @@ Use conventional commit format: `<type>: <scope>: <description>`
 
 ## Current Test Status
 
-**89 tests passing:**
+**150 tests passing:**
+- 8 audit model unit tests
+- 30 hash chain tests (unit + integration: Task 2.2 + 2.3)
 - 24 identity unit tests
 - 46 runtime state unit tests
 - 7 identity integration tests (real Postgres)
 - 9 Redis integration tests (real Redis)
+- 23 runtime control tests (Task 3.1 + 3.2)
 - 3 startup wiring tests
 
 ## Next Steps
 
 See PRD/tasks.md and D2_HANDOFF.md for the full implementation roadmap organized by vertical milestones.
 
-**Immediate next milestone: Milestone A (Audit Foundation)**
-- Task 2.1: Audit log table + migration
-- Task 2.2: Hash-chain write function
-- Task 2.3: Chain verification
-
-**Implementation order summary:**
+**Completed milestones:**
 ```
-Milestone A: Audit Foundation (2.1 → 2.2 → 2.3)
-    ↓
-Milestone B: Runtime Control APIs (3.1 → 3.2)
-    ↓
+Milestone A: Audit Foundation (2.1 → 2.2 → 2.3) ✅
+Milestone B: Runtime Control APIs (3.1 → 3.2) ✅
+```
+
+**Next milestone: Milestone C (Policy + Spend) or Milestone E (Audit APIs)**
+```
 Milestone C: Policy + Spend (2.4, then 2.5 → 2.6)
     ↓
 Milestone D: Orchestration (4.1)
